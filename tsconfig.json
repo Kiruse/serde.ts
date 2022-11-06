@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "lib": ["ES2016"],
+    "target": "ES6",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "allowJs": false,
+    "rootDir": "src/",
+    "outDir": "dist/",
+    "types": ["node", "mocha"],
+  },
+}
