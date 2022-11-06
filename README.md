@@ -7,6 +7,8 @@
 
 *serde* exposes the methods `serialize`, `deserialize`, `serializeAs`, `deserializeAs` as well as `SerdeProtocol<T>`. Most commonly, you will be using `serialize` and `deserialize`.
 
+When TypeScript's decorators feature matures, serde will use these to deliver an even easier developer experience.
+
 ***IMPORTANT:** This library is an early WIP. API may and will change as it matures.*
 
 ## Usage
