@@ -1,4 +1,9 @@
 
+const BI0 = BigInt(0);
+const BI8 = BigInt(8);
+const BI64 = BigInt(64);
+const BI_MASK64 = BigInt('0xFFFFFFFFFFFFFFFF');
+
 export const SERDE = Symbol('SERDE');
 const REGISTRY: Record<string, SerdeProtocol<any>> = {};
 
@@ -111,3 +116,53 @@ export type DeserializeResult<T> = {
     };
   }
 }).register('number');
+
+;(new class extends SerdeProtocol<bigint> {
+  serialize(value: bigint): Uint8Array {
+    const neg = value < BI0;
+    if (neg) value = -value;
+    
+    const bytes = Math.ceil(this.sizeof(value) / 8);
+    const buffer = new Uint8Array(bytes * 8 + 5);
+    
+    let view = new DataView(buffer.buffer);
+    view.setUint8(0, neg ? 1 : 0);
+    view.setUint32(1, bytes, true);
+    
+    view = new DataView(buffer.buffer, 5);
+    for (let i = 0; i < bytes && value > BI0; ++i) {
+      view.setBigUint64(i * 8, value & BI_MASK64, true);
+      value >>= BI64;
+    }
+    
+    return buffer;
+  }
+  deserialize(buffer: Uint8Array, offset: number): DeserializeResult<bigint> {
+    let value = BI0;
+    let view = new DataView(buffer.buffer, offset);
+    const neg = view.getUint8(0);
+    const bytes = view.getUint32(1, true);
+    
+    view = new DataView(buffer.buffer, offset + 5);
+    for (let i = 0; i < bytes; ++i) {
+      const curr = view.getBigUint64(i * 8, true);
+      value += curr << BI64 * BigInt(i);
+    }
+    
+    if (neg) value = -value;
+    
+    return {
+      value,
+      length: bytes * 8 + 5,
+    };
+  }
+  
+  sizeof(bi: bigint) {
+    let n = 0;
+    while (bi > BI0) {
+      bi >>= BI8;
+      ++n;
+    }
+    return n;
+  }
+}).register('bigint');

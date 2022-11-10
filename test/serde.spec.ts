@@ -20,4 +20,16 @@ describe('standard serde', () => {
     expect(deserialized).to.equal(10);
     expect(length).to.equal(8);
   });
+  
+  it('bigint', () => {
+    let ref = BigInt('0x123456789123456789123456789123456789')
+    let { value, length } = deserialize(serialize(ref))
+    expect(value).to.equal(ref);
+    expect(length).to.equal(3 * 8 + 5);
+    
+    ref = -BigInt('0x123456789123456789123456789123456789');
+    ({ value, length } = deserialize(serialize(ref)));
+    expect(value).to.equal(ref);
+    expect(length).to.equal(3 * 8 + 5);
+  });
 });
