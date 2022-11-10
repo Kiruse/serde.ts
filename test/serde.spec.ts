@@ -32,4 +32,16 @@ describe('standard serde', () => {
     expect(value).to.equal(ref);
     expect(length).to.equal(3 * 8 + 5);
   });
+  
+  it('buffer', () => {
+    let ref = Buffer.from([1, 2, 3]);
+    let { value, length } = deserialize(serialize(ref));
+    expect(value).to.deep.equal(ref);
+    expect(length).to.equal(7);
+    
+    ref = Buffer.from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+    ({ value, length } = deserialize(serialize(ref)));
+    expect(value).to.deep.equal(ref);
+    expect(length).to.equal(24);
+  });
 });
