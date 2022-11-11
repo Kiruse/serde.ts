@@ -7,6 +7,20 @@ const BI_MASK64 = BigInt('0xFFFFFFFFFFFFFFFF');
 export const SERDE = Symbol('SERDE');
 const REGISTRY: Record<string, SerdeProtocol<any>> = {};
 
+const TYPEDARRAYS = [
+  Int8Array,
+  Uint8Array,
+  Uint8ClampedArray,
+  Int16Array,
+  Uint16Array,
+  Int32Array,
+  Uint32Array,
+  Float32Array,
+  Float64Array,
+  BigInt64Array,
+  BigUint64Array,
+];
+
 export function serialize(value: any): Uint8Array {
   const protocol = serializeType(value);
   
@@ -184,4 +198,48 @@ if (globalThis.Buffer) {
       };
     }
   }).register('buffer');
+}
+
+;(new class extends SerdeProtocol<ITypedArray> {
+  serialize(value: ITypedArray): Uint8Array {
+    const buffer = new Uint8Array(5 + value.buffer.byteLength);
+    const view = new DataView(buffer.buffer, 0);
+    view.setUint8(0, this.getArrayTypeID(value));
+    view.setUint32(1, value.buffer.byteLength, true);
+    buffer.set(new Uint8Array(value.buffer), 5);
+    return buffer;
+  }
+  deserialize(buffer: Uint8Array, offset: number): DeserializeResult<ITypedArray> {
+    let view = new DataView(buffer.buffer, 0);
+    const typeID = view.getUint8(offset);
+    const byteLength = view.getUint32(offset + 1, true);
+    const data = buffer.slice(offset + 5, offset + 5 + byteLength);
+    
+    const value = this.restoreTypedArray(typeID, byteLength);
+    view = new DataView(value.buffer);
+    data.forEach((byte, i) => {
+      view.setUint8(i, byte);
+    });
+    
+    return {
+      value,
+      length: byteLength + 5,
+    };
+  }
+  
+  getArrayTypeID(buffer: ITypedArray): number {
+    const i = TYPEDARRAYS.findIndex(t => buffer instanceof t);
+    if (i === undefined) throw new Error('Unsupported TypedArray')
+    return i+1;
+  }
+  restoreTypedArray(id: number, byteLength: number): ITypedArray {
+    if (id === 0) throw new Error('Error type ID 0');
+    const type = TYPEDARRAYS[id-1];
+    return new type(Math.ceil(byteLength / type.BYTES_PER_ELEMENT));
+  }
+}).register('typedarray');
+
+interface ITypedArray {
+  BYTES_PER_ELEMENT: number;
+  buffer: ArrayBuffer;
 }
