@@ -81,4 +81,39 @@ describe('standard serde', () => {
       expect(value).to.deep.equal(ref);
     });
   });
+  
+  describe('object', () => {
+    it('simple', () => {
+      const ref = { foo: 'bar', num: 42 };
+      const { value } = deserialize(serialize(ref));
+      expect(value).to.deep.equal(ref);
+    });
+    
+    it('nested', () => {
+      const ref = {
+        foo: {
+          bar: {
+            value: 42,
+          },
+          baz: {
+            value: '69',
+          },
+        },
+      };
+      const { value } = deserialize(serialize(ref));
+      expect(value).to.deep.equal(ref);
+    });
+  });
+  
+  it('mixed object/array', () => {
+    const ref = {
+      foo: [1, 2, 3],
+      bar: [
+        { denom: 'uluna', amount: 42 },
+        { denom: 'uust', amount: 69 },
+      ],
+    };
+    const { value } = deserialize(serialize(ref));
+    expect(value).to.deep.equal(ref);
+  });
 });

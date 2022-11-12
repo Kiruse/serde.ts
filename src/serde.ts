@@ -277,6 +277,65 @@ if (globalThis.Buffer) {
   }
 }).register('array');
 
+;(new class extends SerdeProtocol<object> {
+  serialize(value: object): Uint8Array {
+    const subs = Object.entries(value)
+      .filter(([key, value]) =>
+        !['symbol'].includes(typeof key) &&
+        !['function', 'symbol'].includes(typeof value)
+      )
+      .map(keypair => serializeAs('object-keypair', keypair));
+    const length = subs.reduce((total, curr) => total + curr.byteLength, 4);
+    
+    const buffer = new Uint8Array(length);
+    new DataView(buffer.buffer).setUint32(0, subs.length, true);
+    
+    let offset = 4;
+    for (const sub of subs) {
+      buffer.set(sub, offset);
+      offset += sub.byteLength;
+    }
+    
+    return buffer;
+  }
+  deserialize(buffer: Uint8Array, offset: number): DeserializeResult<object> {
+    const count = new DataView(buffer.buffer, offset).getUint32(0, true);
+    const pairs = new Array<[string, unknown]>(count);
+    
+    let length = 4;
+    for (let i = 0; i < count; ++i) {
+      const { value: pair, length: pairLength } = deserializeAs('object-keypair', buffer, offset + length);
+      pairs[i] = pair as any;
+      length += pairLength;
+    }
+    
+    return {
+      value: Object.fromEntries(pairs),
+      length,
+    };
+  }
+}).register('object');
+
+;(new class extends SerdeProtocol<[string, unknown]> {
+  serialize(value: [string, unknown]): Uint8Array {
+    const bytes0 = serializeAs('string', value[0]);
+    const bytes1 = serialize(value[1]);
+    
+    const buffer = new Uint8Array(bytes0.length + bytes1.length);
+    buffer.set(bytes0, 0);
+    buffer.set(bytes1, bytes0.length);
+    return buffer;
+  }
+  deserialize(buffer: Uint8Array, offset: number): DeserializeResult<[string, unknown]> {
+    const { value: key, length: keyByteLength } = deserializeAs('string', buffer, offset);
+    const { value, length: valueByteLength } = deserialize(buffer, offset + keyByteLength);
+    return {
+      value: [key as string, value],
+      length: keyByteLength + valueByteLength,
+    };
+  }
+}).register('object-keypair');
+
 interface ITypedArray {
   BYTES_PER_ELEMENT: number;
   buffer: ArrayBuffer;
