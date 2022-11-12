@@ -68,8 +68,12 @@ export function serializeAs(name: string, value: any): Uint8Array {
 }
 
 export function deserialize(buffer: Uint8Array, offset = 0): DeserializeResult<unknown> {
-  const { value: protocol, length } = deserializeAs('string', buffer, offset) as DeserializeResult<string>;
-  return deserializeAs(protocol, buffer, offset + length);
+  const { value: protocol, length: length0 } = deserializeAs('string', buffer, offset) as DeserializeResult<string>;
+  const { value, length: length1 } = deserializeAs(protocol, buffer, offset + length0);
+  return {
+    value,
+    length: length0 + length1,
+  };
 }
 
 export function deserializeAs(name: string, buffer: Uint8Array, offset = 0): DeserializeResult<unknown> {
@@ -238,6 +242,40 @@ if (globalThis.Buffer) {
     return new type(Math.ceil(byteLength / type.BYTES_PER_ELEMENT));
   }
 }).register('typedarray');
+
+;(new class extends SerdeProtocol<unknown[]> {
+  serialize(value: unknown[]): Uint8Array {
+    const subs = value.map(serialize);
+    const totalByteLength = subs.reduce((total, curr) => total + curr.byteLength, 0);
+    
+    const buffer = new Uint8Array(4 + totalByteLength);
+    new DataView(buffer.buffer).setUint32(0, value.length, true);
+    
+    let offset = 4;
+    subs.forEach(sub => {
+      buffer.set(sub, offset);
+      offset += sub.byteLength;
+    });
+    
+    return buffer;
+  }
+  deserialize(buffer: Uint8Array, offset: number): DeserializeResult<unknown[]> {
+    const count = new DataView(buffer.buffer, offset).getUint32(0, true);
+    
+    const value = new Array<unknown>(count);
+    let length = 4;
+    for (let i = 0; i < count; ++i) {
+      const { value: subvalue, length: sublength } = deserialize(buffer, offset + length);
+      value[i] = subvalue;
+      length += sublength;
+    }
+    
+    return {
+      value,
+      length,
+    };
+  }
+}).register('array');
 
 interface ITypedArray {
   BYTES_PER_ELEMENT: number;

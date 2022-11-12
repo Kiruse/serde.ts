@@ -9,7 +9,7 @@ describe('standard serde', () => {
     
     const { value: deserialized, length } = deserialize(serialized);
     expect(deserialized).to.equal('foobar');
-    expect(length).to.equal(10);
+    expect(length).to.equal(20);
   });
   
   it('numbers', () => {
@@ -18,31 +18,31 @@ describe('standard serde', () => {
     
     const { value: deserialized, length } = deserialize(serialized);
     expect(deserialized).to.equal(10);
-    expect(length).to.equal(8);
+    expect(length).to.equal(18);
   });
   
   it('bigint', () => {
     let ref = BigInt('0x123456789123456789123456789123456789')
     let { value, length } = deserialize(serialize(ref))
     expect(value).to.equal(ref);
-    expect(length).to.equal(3 * 8 + 5);
+    expect(length).to.equal(10 + 3 * 8 + 5);
     
     ref = -BigInt('0x123456789123456789123456789123456789');
     ({ value, length } = deserialize(serialize(ref)));
     expect(value).to.equal(ref);
-    expect(length).to.equal(3 * 8 + 5);
+    expect(length).to.equal(10 + 3 * 8 + 5);
   });
   
   it('buffer', () => {
     let ref = Buffer.from([1, 2, 3]);
     let { value, length } = deserialize(serialize(ref));
     expect(value).to.deep.equal(ref);
-    expect(length).to.equal(7);
+    expect(length).to.equal(17);
     
     ref = Buffer.from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
     ({ value, length } = deserialize(serialize(ref)));
     expect(value).to.deep.equal(ref);
-    expect(length).to.equal(24);
+    expect(length).to.equal(34);
   });
   
   it('typedarray', () => {
@@ -50,21 +50,35 @@ describe('standard serde', () => {
       const ref = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
       const { value, length } = deserialize(serialize(ref));
       expect(value).to.deep.equal(ref);
-      expect(length).to.equal(15);
+      expect(length).to.equal(29);
     }
     
     {
       const ref = new Uint32Array([1, 2, 3, 4]);
       const { value, length } = deserialize(serialize(ref));
       expect(value).to.deep.equal(ref);
-      expect(length).to.equal(21);
+      expect(length).to.equal(35);
     }
     
     {
       const ref = new BigInt64Array([BigInt(16), BigInt(420), BigInt(69)]);
       const { value, length } = deserialize(serialize(ref));
       expect(value).to.deep.equal(ref);
-      expect(length).to.equal(29);
+      expect(length).to.equal(43);
     }
+  });
+  
+  describe('array', () => {
+    it('of primitives', () => {
+      const ref = [1, 2, 3];
+      const { value } = deserialize(serialize(ref));
+      expect(value).to.deep.equal(ref);
+    });
+    
+    it('nested', () => {
+      const ref = [[1, 2], 3, [4, [5, 6]]];
+      const { value } = deserialize(serialize(ref));
+      expect(value).to.deep.equal(ref);
+    });
   });
 });
