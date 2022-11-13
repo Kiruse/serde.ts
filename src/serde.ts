@@ -154,6 +154,22 @@ export class SimpleSerdeProtocol<T, S = unknown> extends SerdeProtocol<T> {
   }
 }
 
+/** Create a new `SimpleSerdeProtocol`.
+ * 
+ * This protocol simply extracts & recreates a data type `S` of the underlying type `T`, and otherwise de/serializes it
+ * using the `ObjectSerde` protocol.
+ */
+export function createProtocol<T, S = unknown>(
+  name: string,
+  filter: ((value: T) => S) | undefined | null,
+  rebuild: ((data: S) => T) | undefined | null,
+) {
+  return new class extends SimpleSerdeProtocol<T, S> {
+    filter(value: T): S { return filter(value) }
+    rebuild(data: S): T { return rebuild(data) }
+  }(name);
+}
+
 /** The result of a deserialization provides the deserialized value
  * and the number of consumed bytes. The latter is used to further
  * deserialize other values contained within the same buffer.
