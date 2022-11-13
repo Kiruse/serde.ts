@@ -101,7 +101,7 @@ export function deserializeAs(name: string, buffer: Uint8Array, offset = 0): Des
 
 export abstract class SerdeProtocol<T> {
   abstract serialize(value: T): Uint8Array;
-  abstract deserialize(buffer: Uint8Array, offset: number): DeserializeResult<T>;
+  abstract deserialize(buffer: Uint8Array, offset?: number): DeserializeResult<T>;
   register(name: string, force = false) {
     if (name in REGISTRY && !force)
       throw new Error(`SerdeProtocol ${name} already exists`);
@@ -119,7 +119,7 @@ export class SimpleSerdeProtocol<T, S = unknown> extends SerdeProtocol<T> {
   serialize(value: T): Uint8Array {
     return serializeAs('object', this.filter(value));
   }
-  deserialize(buffer: Uint8Array, offset: number): DeserializeResult<T> {
+  deserialize(buffer: Uint8Array, offset = 0): DeserializeResult<T> {
     const { value: data, length } = deserializeAs('object', buffer, offset);
     return {
       value: this.rebuild(data),
@@ -188,7 +188,7 @@ export type DeserializeResult<T> = {
     buffer.set(new TextEncoder().encode(value), 4);
     return buffer;
   }
-  deserialize(buffer: Uint8Array, offset: number): DeserializeResult<string> {
+  deserialize(buffer: Uint8Array, offset = 0): DeserializeResult<string> {
     const length = new DataView(buffer.buffer, offset).getUint32(0, true);
     const value = new TextDecoder().decode(new DataView(buffer.buffer, offset + 4, length));
     return {
@@ -202,7 +202,7 @@ export type DeserializeResult<T> = {
   serialize(_: undefined): Uint8Array {
     return new Uint8Array(0);
   }
-  deserialize(buffer: Uint8Array, offset: number): DeserializeResult<undefined> {
+  deserialize(buffer: Uint8Array, offset = 0): DeserializeResult<undefined> {
     return {
       value: undefined,
       length: 0,
@@ -214,7 +214,7 @@ export type DeserializeResult<T> = {
   serialize(_: null): Uint8Array {
     return new Uint8Array(0);
   }
-  deserialize(buffer: Uint8Array, offset: number): DeserializeResult<null> {
+  deserialize(buffer: Uint8Array, offset = 0): DeserializeResult<null> {
     return {
       value: null,
       length: 0,
@@ -228,7 +228,7 @@ export type DeserializeResult<T> = {
     new DataView(buffer.buffer).setFloat64(0, value, true);
     return buffer;
   }
-  deserialize(buffer: Uint8Array, offset: number): DeserializeResult<number> {
+  deserialize(buffer: Uint8Array, offset = 0): DeserializeResult<number> {
     return {
       value: new DataView(buffer.buffer, offset).getFloat64(0, true),
       length: 8,
@@ -256,7 +256,7 @@ export type DeserializeResult<T> = {
     
     return buffer;
   }
-  deserialize(buffer: Uint8Array, offset: number): DeserializeResult<bigint> {
+  deserialize(buffer: Uint8Array, offset = 0): DeserializeResult<bigint> {
     let value = BI0;
     let view = new DataView(buffer.buffer, offset);
     const neg = view.getUint8(0);
@@ -294,7 +294,7 @@ if (globalThis.Buffer) {
       buffer.set(value, 4);
       return buffer;
     }
-    deserialize(buffer: Uint8Array, offset: number): DeserializeResult<Buffer> {
+    deserialize(buffer: Uint8Array, offset = 0): DeserializeResult<Buffer> {
       const bytes = new DataView(buffer.buffer, offset).getUint32(0, true);
       const value = Buffer.from(buffer.slice(offset + 4, offset + bytes + 4));
       return {
@@ -314,7 +314,7 @@ if (globalThis.Buffer) {
     buffer.set(new Uint8Array(value.buffer), 5);
     return buffer;
   }
-  deserialize(buffer: Uint8Array, offset: number): DeserializeResult<ITypedArray> {
+  deserialize(buffer: Uint8Array, offset = 0): DeserializeResult<ITypedArray> {
     let view = new DataView(buffer.buffer, 0);
     const typeID = view.getUint8(offset);
     const byteLength = view.getUint32(offset + 1, true);
@@ -360,7 +360,7 @@ if (globalThis.Buffer) {
     
     return buffer;
   }
-  deserialize(buffer: Uint8Array, offset: number): DeserializeResult<unknown[]> {
+  deserialize(buffer: Uint8Array, offset = 0): DeserializeResult<unknown[]> {
     const count = new DataView(buffer.buffer, offset).getUint32(0, true);
     
     const value = new Array<unknown>(count);
@@ -399,7 +399,7 @@ if (globalThis.Buffer) {
     
     return buffer;
   }
-  deserialize(buffer: Uint8Array, offset: number): DeserializeResult<object> {
+  deserialize(buffer: Uint8Array, offset = 0): DeserializeResult<object> {
     const count = new DataView(buffer.buffer, offset).getUint32(0, true);
     const pairs = new Array<[string, unknown]>(count);
     
@@ -427,7 +427,7 @@ if (globalThis.Buffer) {
     buffer.set(bytes1, bytes0.length);
     return buffer;
   }
-  deserialize(buffer: Uint8Array, offset: number): DeserializeResult<[string, unknown]> {
+  deserialize(buffer: Uint8Array, offset = 0): DeserializeResult<[string, unknown]> {
     const { value: key, length: keyByteLength } = deserializeAs('string', buffer, offset);
     const { value, length: valueByteLength } = deserialize(buffer, offset + keyByteLength);
     return {
