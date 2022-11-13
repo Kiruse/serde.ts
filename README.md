@@ -1,5 +1,5 @@
 # serde.ts
-*serde.ts* defines an API for binary **ser**ialization & **de**serialization of arbitrary data types. It differs vastly from JSON and BSON in that it is implemented through `SerdeProtocol`s for few main advantages:
+*serde* defines an API for binary **ser**ialization & **de**serialization of arbitrary data types. It differs vastly from JSON and BSON in that it is implemented through `SerdeProtocol`s for few main advantages:
 
 - A protocol can integrate any type with the API, even third party types,
 - Serialized values can be deserialized appropriately, and
@@ -26,20 +26,83 @@ console.log(deserialize(serialized));
 // Object { foo: 'bar', answer: 42 }
 ```
 
-Note that at this early stage I am still implementing the various standard protocols, and that the above example likely does not work yet.
+If you need TypeScript support you may use the protocols directly:
 
-## Custom Types
-Custom types which aren't object literals (such that `Object.getPrototypeOf(value) !== Object.prototype`) must fulfill two conditions:
+```typescript
+import { NumberSerde } from '@kiruse/serde'
 
-1. Instances have `[SERDE]: string` property which informs the API of the protocol to use for serialization.
-2. A custom derived `SerdeProtocol` for your type.
+let serialized = NumberSerde.serialize(42);
+let deserialized = NumberSerde.deserialize(serialized);
+// deserialized is a `number`
+```
 
-Implementing a protocol requires implementing its `serialize` and `deserialize` methods.
+Standard protocols for the various basic types exist. You can get a list of all currently registered protocols with `getProtocolNames()`.
+
+## `createProtocol`
+Unless you have special needs for the binary format of your data type, `createProtocol` provides a streamlined workflow to easily integrate a custom type with serde. Following is its signature:
+
+```typescript
+function createProtocol<T, S>(
+  name: string,
+  filter: ((value: T) => S) | undefined | null,
+  rebuild: ((data: S) => T) | undefined | null,
+): SimpleSerdeProtocol<T, S>;
+```
+
+`name` will be the name with which your protocol is registered. This name is prefixed to your binary data when calling `serialize`, and used to restore your data when calling `deserialize`. Name must be unique, otherwise the system will throw.
+
+`filter` allows you to extract a simplified data-only version of your underlying type. This can also be used to cut out data which can be inferred from other properties, or perhaps from the program context.
+
+`rebuild` then allows reconstructing your underlying type from the data returned by `filter`. Accordingly, it can also be used to enrich your object.
+
+Although it returns a `SimpleSerdeProtocol` which you could implement yourself, building it with `createProtocol` is more convenient as both `S` and `T` type parameters can be inferred from `filter` and `rebuild`. Effectively, you normally don't have to explicitly define `S`.
+
+**Example**
+
+```typescript
+import { SERDE, createProtocol } from './src';
+
+type MyType = {
+  [SERDE]: 'my-type';
+  foo: string;
+  bar: number;
+  deserialized: boolean;
+}
+
+const MyProtocol = createProtocol(
+  'my-type',
+  ({ foo, bar }: MyType) => ({ foo, bar }),
+  ({ foo, bar }): MyType => ({
+    [SERDE]: 'my-type',
+    foo,
+    bar,
+    deserialized: true,
+  }),
+);
+
+const serialized = MyProtocol.serialize({
+  [SERDE]: 'my-type',
+  foo: 'baz',
+  bar: 42,
+  deserialized: false,
+});
+console.log(MyProtocol.deserialize(serialized).value);
+// {
+//   [SERDE]: 'my-type',
+//   foo: 'baz',
+//   bar: 42,
+//   deserialized: true,
+// }
+```
+
+## `SerdeProtocol<T>`
+You may choose to implement `SerdeProtocol` directly. This variant grants absolute control over the de/serialization algorithms in place. It is more appropriate, for example, for tabular or schematic data formats, as you can pad and align data within a row for predictable navigation within the binary data without the need to deserialize everything first.
+
+Implementing a `SerdeProtocol` requires implementing its `serialize` and `deserialize` methods. Below shows my code for the implementation of `SerdeProtocol<number>`.
 
 Once implemented, call `protocol.register(name)` on an instance of your protocol to register it with *serde*. You may also forcefully override an existing protocol by passing `true` as second parameter.
 
-### Example: number
-The simplest example is the standard 'number' protocol:
+**Example**
 
 ```typescript
 import { DeserializeResult, SerdeProtocol } from '@kiruse/serde'
@@ -51,7 +114,7 @@ import { DeserializeResult, SerdeProtocol } from '@kiruse/serde'
     return buffer;
   }
   
-  deserialize(buffer: Uint8Array, offset: number): DeserializeResult<number> {
+  deserialize(buffer: Uint8Array, offset = 0): DeserializeResult<number> {
     return {
       value: new DataView(buffer.buffer, offset).getFloat64(0, true),
       length: 8,
@@ -64,37 +127,13 @@ Note that this example is written in TypeScript and respective transformations m
 
 This is a simple, context-less protocol. Depending on your needs, you may create protocols dependent on some external state.
 
-### Complex Example
-But who cares about primitives when most data types are composites or worse? Ideally, your protocol can derive a simple object and de/serialize that instead:
+## Buffer Protocol
+Note that because this library is also intended to be run in the browser, but `Buffer` is typically a NodeJS-exclusive type, you must manually import its `SerdeProtocol`. You can either import it for side effects, or for its default export, depending on your needs:
 
 ```typescript
-import { deserialize, DeserializeResult, SERDE, SerdeProtocol, serialize } from '@kiruse/serde'
+import '@kiruse/serde'
 
-class MyType {
-  [SERDE] = 'mytype';
-  #data: number;
-  
-  constructor(data: number) {
-    this.#data = data;
-  }
-  
-  foo() { return 'foo' }
-  bar() { return 'bar' }
-  get data() { return this.#data }
-}
+// or
 
-;(new class extends SerdeProtocol<MyType> {
-  serialize(obj: MyType): Uint8Array {
-    return serializeAs('object', { data: obj.data });
-  }
-  deserialize(buffer: Uint8Array, offset: number): DeserializeResult<MyType> {
-    const { value, length } = deserializeAs('object', buffer);
-    return {
-      value: new MyType(value.data),
-      length,
-    };
-  };
-}).register('mytype');
+import BufferSerde from '@kiruse/serde'
 ```
-
-Of course, in this case, one could just as well simply serialize `value.data` itself rather than as part of an object, but this is just a simplified example. **Note** that `serializeAs` differs from `serialize` in that it does not append the necessary protocol name for deserialization to the returned `Uint8Array` and should thus be preferred in this context.
