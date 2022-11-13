@@ -1,4 +1,4 @@
-import { serialize, deserialize } from '../src/serde'
+import { serialize, deserialize, SerdeProtocol, DeserializeResult, SERDE, serializeAs, deserializeAs } from '../src/serde'
 import { expect } from 'chai'
 
 describe('standard serde', () => {
@@ -112,6 +112,38 @@ describe('standard serde', () => {
         { denom: 'uluna', amount: 42 },
         { denom: 'uust', amount: 69 },
       ],
+    };
+    const { value } = deserialize(serialize(ref));
+    expect(value).to.deep.equal(ref);
+  });
+  
+  it('custom', () => {
+    type TestType = {
+      [SERDE]: 'test::custom';
+      foo: string;
+      bar: number;
+    }
+    
+    ;(new class extends SerdeProtocol<TestType> {
+      serialize(value: TestType): Uint8Array {
+        return serializeAs('object', value);
+      }
+      deserialize(buffer: Uint8Array, offset: number): DeserializeResult<TestType> {
+        const { value, length } = deserializeAs('object', buffer, offset) as any;
+        return {
+          value: {
+            [SERDE]: 'test::custom',
+            ...value,
+          },
+          length,
+        };
+      }
+    }).register('test::custom');
+    
+    const ref: TestType = {
+      [SERDE]: 'test::custom',
+      foo: 'foo',
+      bar: 42,
     };
     const { value } = deserialize(serialize(ref));
     expect(value).to.deep.equal(ref);

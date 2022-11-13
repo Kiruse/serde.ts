@@ -53,12 +53,16 @@ function serializeType(value: any): string {
   
   if (Array.isArray(value))
     return 'array';
-  if (Object.getPrototypeOf(value) === Object.prototype)
-    return 'object';
   
-  if (!(SERDE in value) || typeof value[SERDE] !== 'string')
-    throw new Error('Custom types must provide [SERDE] property');
-  return value[SERDE];
+  if (SERDE in value) {
+    if (typeof value[SERDE] !== 'string')
+      throw new Error('[SERDE] property should be the name of a SerdeProtocol');
+    return value[SERDE];
+  }
+  
+  if (Object.getPrototypeOf(value) !== Object.prototype)
+    throw new Error('')
+  return 'object';
 }
 
 export function serializeAs(name: string, value: any): Uint8Array {
