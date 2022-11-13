@@ -1,6 +1,6 @@
 {
   "name": "@kiruse/serde",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Binary serialization & deserialization API",
   "main": "dist/index.js",
   "repository": "https://github.com/Kiruse/serde.ts",
