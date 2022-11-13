@@ -181,7 +181,7 @@ export type DeserializeResult<T> = {
   length: number;
 }
 
-;(new class extends SerdeProtocol<string> {
+export const StringSerde = (new class extends SerdeProtocol<string> {
   serialize(value: string): Uint8Array {
     const buffer = new Uint8Array(4 + value.length);
     new DataView(buffer.buffer).setUint32(0, value.length, true);
@@ -198,7 +198,7 @@ export type DeserializeResult<T> = {
   }
 }).register('string');
 
-;(new class extends SerdeProtocol<undefined> {
+export const UndefinedSerde = (new class extends SerdeProtocol<undefined> {
   serialize(_: undefined): Uint8Array {
     return new Uint8Array(0);
   }
@@ -210,7 +210,7 @@ export type DeserializeResult<T> = {
   }
 }).register('undef');
 
-;(new class extends SerdeProtocol<null> {
+export const NullSerde = (new class extends SerdeProtocol<null> {
   serialize(_: null): Uint8Array {
     return new Uint8Array(0);
   }
@@ -222,7 +222,7 @@ export type DeserializeResult<T> = {
   }
 }).register('null');
 
-;(new class extends SerdeProtocol<number> {
+export const NumberSerde = (new class extends SerdeProtocol<number> {
   serialize(value: number): Uint8Array {
     const buffer = new Uint8Array(8);
     new DataView(buffer.buffer).setFloat64(0, value, true);
@@ -236,7 +236,7 @@ export type DeserializeResult<T> = {
   }
 }).register('number');
 
-;(new class extends SerdeProtocol<bigint> {
+export const BigIntSerde = (new class extends SerdeProtocol<bigint> {
   serialize(value: bigint): Uint8Array {
     const neg = value < BI0;
     if (neg) value = -value;
@@ -286,7 +286,7 @@ export type DeserializeResult<T> = {
   }
 }).register('bigint');
 
-;(new class extends SerdeProtocol<ITypedArray> {
+export const TypedArraySerde = (new class extends SerdeProtocol<ITypedArray> {
   serialize(value: ITypedArray): Uint8Array {
     const buffer = new Uint8Array(5 + value.buffer.byteLength);
     const view = new DataView(buffer.buffer, 0);
@@ -325,7 +325,7 @@ export type DeserializeResult<T> = {
   }
 }).register('typedarray');
 
-;(new class extends SerdeProtocol<unknown[]> {
+export const ArraySerde = (new class extends SerdeProtocol<unknown[]> {
   serialize(value: unknown[]): Uint8Array {
     const subs = value.map(serialize);
     const totalByteLength = subs.reduce((total, curr) => total + curr.byteLength, 0);
@@ -359,7 +359,7 @@ export type DeserializeResult<T> = {
   }
 }).register('array');
 
-;(new class extends SerdeProtocol<object> {
+export const ObjectSerde = (new class extends SerdeProtocol<object> {
   serialize(value: object): Uint8Array {
     const subs = Object.entries(value)
       .filter(([key, value]) =>
@@ -398,7 +398,7 @@ export type DeserializeResult<T> = {
   }
 }).register('object');
 
-;(new class extends SerdeProtocol<[string, unknown]> {
+export const ObjectKeypairSerde = (new class extends SerdeProtocol<[string, unknown]> {
   serialize(value: [string, unknown]): Uint8Array {
     const bytes0 = serializeAs('string', value[0]);
     const bytes1 = serialize(value[1]);
