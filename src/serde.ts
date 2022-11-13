@@ -7,6 +7,15 @@ const BI_MASK64 = BigInt('0xFFFFFFFFFFFFFFFF');
 export const SERDE = Symbol('SERDE');
 const REGISTRY: Record<string, SerdeProtocol<any>> = {};
 
+/** Get a list of all registered protocol names. */
+export const getProtocolNames = () => Object.keys(REGISTRY);
+/** Get the protocol registry.
+ * 
+ * **WARNING:** This is not intended for the average use case and can mess things up. It is exposed here for more
+ * advanced use cases only.
+ */
+export const getProtocolRegistry = () => REGISTRY;
+
 const TYPEDARRAYS = [
   Int8Array,
   Uint8Array,
