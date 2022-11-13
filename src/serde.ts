@@ -39,6 +39,10 @@ function serializeType(value: any): string {
   
   if (['string', 'number', 'bigint'].includes(typeof value))
     return typeof value;
+  if (value === undefined)
+    return 'undef';
+  if (value === null)
+    return 'null';
   
   if (globalThis.Buffer && globalThis.Buffer.isBuffer(value))
     return 'buffer';
@@ -168,6 +172,30 @@ export type DeserializeResult<T> = {
     };
   }
 }).register('string');
+
+;(new class extends SerdeProtocol<undefined> {
+  serialize(_: undefined): Uint8Array {
+    return new Uint8Array(0);
+  }
+  deserialize(buffer: Uint8Array, offset: number): DeserializeResult<undefined> {
+    return {
+      value: undefined,
+      length: 0,
+    };
+  }
+}).register('undef');
+
+;(new class extends SerdeProtocol<null> {
+  serialize(_: null): Uint8Array {
+    return new Uint8Array(0);
+  }
+  deserialize(buffer: Uint8Array, offset: number): DeserializeResult<null> {
+    return {
+      value: null,
+      length: 0,
+    };
+  }
+}).register('null');
 
 ;(new class extends SerdeProtocol<number> {
   serialize(value: number): Uint8Array {

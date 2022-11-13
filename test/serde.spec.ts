@@ -12,6 +12,20 @@ describe('standard serde', () => {
     expect(length).to.equal(20);
   });
   
+  it('undefined/null', () => {
+    {
+      const { value, length } = deserialize(serialize(undefined));
+      expect(value).to.be.undefined;
+      expect(length).to.equal(9);
+    }
+    
+    {
+      const { value, length } = deserialize(serialize(null));
+      expect(value).to.be.null;
+      expect(length).to.equal(8);
+    }
+  });
+  
   it('numbers', () => {
     const serialized = serialize(10);
     expect(serialized).to.be.instanceOf(Uint8Array);
