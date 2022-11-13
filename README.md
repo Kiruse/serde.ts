@@ -32,11 +32,13 @@ If you need TypeScript support you may use the protocols directly:
 import { NumberSerde } from '@kiruse/serde'
 
 let serialized = NumberSerde.serialize(42);
-let deserialized = NumberSerde.deserialize(serialized);
+let deserialized = NumberSerde.deserialize(serialized).value;
 // deserialized is a `number`
 ```
 
 Standard protocols for the various basic types exist. You can get a list of all currently registered protocols with `getProtocolNames()`.
+
+Note that the returned data of `deserialize` is an object with two properties: `value`, which resembles your deserialized data, and `length`, which resembles the number of bytes read. The latter is used to tightly pack different data together into one continuous `Uint8Array`.
 
 ## `createProtocol`
 Unless you have special needs for the binary format of your data type, `createProtocol` provides a streamlined workflow to easily integrate a custom type with serde. Following is its signature:
