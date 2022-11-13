@@ -1,4 +1,4 @@
-import { serialize, deserialize, SerdeProtocol, DeserializeResult, SERDE, serializeAs, deserializeAs } from '../src/serde'
+import { serialize, deserialize, SerdeProtocol, DeserializeResult, SERDE, serializeAs, deserializeAs, SimpleSerdeProtocol } from '../src/serde'
 import { expect } from 'chai'
 
 describe('standard serde', () => {
@@ -117,35 +117,76 @@ describe('standard serde', () => {
     expect(value).to.deep.equal(ref);
   });
   
-  it('custom', () => {
-    type TestType = {
-      [SERDE]: 'test::custom';
-      foo: string;
-      bar: number;
-    }
-    
-    ;(new class extends SerdeProtocol<TestType> {
-      serialize(value: TestType): Uint8Array {
-        return serializeAs('object', value);
+  describe('custom', () => {
+    it('inject', () => {
+      type TestType = {
+        [SERDE]: 'test::inject';
+        foo: string;
+        bar: number;
       }
-      deserialize(buffer: Uint8Array, offset: number): DeserializeResult<TestType> {
-        const { value, length } = deserializeAs('object', buffer, offset) as any;
-        return {
-          value: {
-            [SERDE]: 'test::custom',
-            ...value,
-          },
-          length,
-        };
-      }
-    }).register('test::custom');
+      
+      ;(new class extends SerdeProtocol<TestType> {
+        serialize(value: TestType): Uint8Array {
+          return serializeAs('object', value);
+        }
+        deserialize(buffer: Uint8Array, offset: number): DeserializeResult<TestType> {
+          const { value, length } = deserializeAs('object', buffer, offset) as any;
+          return {
+            value: {
+              [SERDE]: 'test::inject',
+              ...value,
+            },
+            length,
+          };
+        }
+      }).register('test::inject');
+      
+      const ref: TestType = {
+        [SERDE]: 'test::inject',
+        foo: 'foo',
+        bar: 42,
+      };
+      const { value } = deserialize(serialize(ref));
+      expect(value).to.deep.equal(ref);
+    });
     
-    const ref: TestType = {
-      [SERDE]: 'test::custom',
-      foo: 'foo',
-      bar: 42,
-    };
-    const { value } = deserialize(serialize(ref));
-    expect(value).to.deep.equal(ref);
+    it('SimpleSerdeProtocol', () => {
+      type TestType = {
+        [SERDE]: 'test::simpleserde',
+        foo: string;
+        bar: number;
+        deserialized: boolean;
+      }
+      
+      new (class extends SimpleSerdeProtocol<TestType> {
+        protected filter(value: TestType): unknown {
+          const { foo, bar } = value;
+          return { foo, bar };
+        }
+        protected rebuild(generic: any): TestType {
+          const { foo, bar } = generic;
+          return {
+            [SERDE]: 'test::simpleserde',
+            foo,
+            bar,
+            deserialized: true,
+          }
+        }
+      })('test::simpleserde');
+      
+      const original: TestType = {
+        [SERDE]: 'test::simpleserde',
+        foo: 'foo',
+        bar: 42,
+        deserialized: false,
+      };
+      const { value } = deserialize(serialize(original));
+      expect(value).to.deep.equal({
+        [SERDE]: 'test::simpleserde',
+        foo: 'foo',
+        bar: 42,
+        deserialized: true,
+      });
+    });
   });
 });

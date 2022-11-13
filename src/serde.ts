@@ -97,6 +97,50 @@ export abstract class SerdeProtocol<T> {
   }
 }
 
+export class SimpleSerdeProtocol<T, S = unknown> extends SerdeProtocol<T> {
+  constructor(public readonly name: string) {
+    super();
+    super.register(name);
+  }
+  
+  serialize(value: T): Uint8Array {
+    return serializeAs('object', this.filter(value));
+  }
+  deserialize(buffer: Uint8Array, offset: number): DeserializeResult<T> {
+    const { value: data, length } = deserializeAs('object', buffer, offset);
+    return {
+      value: this.rebuild(data),
+      length,
+    };
+  }
+  
+  /** Produce a simplified data-only version of the underlying type.
+   * This data will be passed to `rebuild` during deserialization.
+   * 
+   * By default simply returns the original data. Note that symbols
+   * and functions are skipped during 'object' SerdeProtocol serialization.
+   */
+  protected filter(value: T): S {
+    return value as any;
+  }
+  
+  /** Rebuild the underlying type from the generic type produced by `filter` method.
+   * 
+   * The default implementation simply adds the associated `[SERDE]` property.
+   */
+  protected rebuild(generic: any): T {
+    //@ts-ignore
+    return {
+      [SERDE]: this.name,
+      ...generic
+    };
+  }
+  
+  override register(name: string, force?: boolean): this {
+    throw new Error('SimpleSerdeProtocol does not support multiple instances');
+  }
+}
+
 /** The result of a deserialization provides the deserialized value
  * and the number of consumed bytes. The latter is used to further
  * deserialize other values contained within the same buffer.
