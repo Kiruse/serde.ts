@@ -11,6 +11,16 @@ When TypeScript's decorators feature matures, serde will use these to deliver an
 
 ***IMPORTANT:** This library is an early WIP. API may and will change as it matures.*
 
+## Table of Contents
+- [serde.ts](#serdets)
+  - [Table of Contents](#table-of-contents)
+  - [Usage](#usage)
+    - [`createProtocol`](#createprotocol)
+    - [`SerdeProtocol<T>`](#serdeprotocolt)
+  - [Buffer Protocol](#buffer-protocol)
+  - [Utilities](#utilities)
+    - [`patchSerde<T>(obj: T, protocol: string): T`](#patchserdetobj-t-protocol-string-t)
+
 ## Usage
 For the simplest use, you'll only use `serialize` and `deserialize`:
 
@@ -40,7 +50,7 @@ Standard protocols for the various basic types exist. You can get a list of all 
 
 Note that the returned data of `deserialize` is an object with two properties: `value`, which resembles your deserialized data, and `length`, which resembles the number of bytes read. The latter is used to tightly pack different data together into one continuous `Uint8Array`.
 
-## `createProtocol`
+### `createProtocol`
 Unless you have special needs for the binary format of your data type, `createProtocol` provides a streamlined workflow to easily integrate a custom type with serde. Following is its signature:
 
 ```typescript
@@ -97,7 +107,7 @@ console.log(MyProtocol.deserialize(serialized).value);
 // }
 ```
 
-## `SerdeProtocol<T>`
+### `SerdeProtocol<T>`
 You may choose to implement `SerdeProtocol` directly. This variant grants absolute control over the de/serialization algorithms in place. It is more appropriate, for example, for tabular or schematic data formats, as you can pad and align data within a row for predictable navigation within the binary data without the need to deserialize everything first.
 
 Implementing a `SerdeProtocol` requires implementing its `serialize` and `deserialize` methods. Below shows my code for the implementation of `SerdeProtocol<number>`.
@@ -139,3 +149,9 @@ import '@kiruse/serde'
 
 import BufferSerde from '@kiruse/serde'
 ```
+
+## Utilities
+There are a few utilities, e.g. to help work around TypeScript restrictions:
+
+### `patchSerde<T>(obj: T, protocol: string): T`
+Monkeypatches `obj[SERDE] = protocol`. This is convenient when working with TypeScript and patching a SerdeProtocol into arbitrary types the input `obj`.
