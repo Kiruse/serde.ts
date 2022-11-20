@@ -51,7 +51,9 @@ export function serialize(value: any): Uint8Array {
 
 function serializeType(value: any): string {
   if (typeof value === 'symbol')
-    throw new Error('Cannot serialize symbols');
+    throw new Error('Cannot de/serialize symbols');
+  if (typeof value === 'function')
+    throw new Error('Cannot de/serialize functions');
   
   if (['string', 'number', 'bigint'].includes(typeof value))
     return typeof value;
@@ -60,19 +62,8 @@ function serializeType(value: any): string {
   if (value === null)
     return 'null';
   
-  if (globalThis.Buffer && globalThis.Buffer.isBuffer(value))
-    return 'buffer';
-  
-  if (value.buffer instanceof ArrayBuffer)
-    return 'typedarray';
-  if (value instanceof ArrayBuffer)
-    return 'arraybuffer';
-  
   if (typeof value !== 'object')
     throw new Error(`Unsupported type ${typeof value}`);
-  
-  if (Array.isArray(value))
-    return 'array';
   
   if (SERDE in value) {
     if (typeof value[SERDE] !== 'string')
@@ -80,8 +71,19 @@ function serializeType(value: any): string {
     return value[SERDE];
   }
   
+  if (globalThis.Buffer?.isBuffer(value))
+    return 'buffer';
+  
+  if (value.buffer instanceof ArrayBuffer)
+    return 'typedarray';
+  if (value instanceof ArrayBuffer)
+    return 'arraybuffer';
+  
+  if (Array.isArray(value))
+    return 'array';
+  
   if (Object.getPrototypeOf(value) !== Object.prototype)
-    throw new Error('')
+    throw new Error('Cannot auto-de/serialize custom class instances');
   return 'object';
 }
 
