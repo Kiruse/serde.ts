@@ -1,4 +1,4 @@
-import { patchSubserde } from "./util";
+import { patchSubserde } from './util'
 
 const BI0 = BigInt(0);
 const BI8 = BigInt(8);
