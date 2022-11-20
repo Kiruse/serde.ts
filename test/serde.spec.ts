@@ -1,16 +1,29 @@
-import { serialize, deserialize, SerdeProtocol, DeserializeResult, SERDE, serializeAs, deserializeAs, SimpleSerdeProtocol } from '../src/serde'
+import { serialize, deserialize, SerdeProtocol, DeserializeResult, SERDE, serializeAs, deserializeAs, SimpleSerdeProtocol, MaybeSerde, SUBSERDE } from '../src/serde'
+import { patchSubserde } from '../src/util'
 import '../src/buffer'
 import { expect } from 'chai'
 
 describe('standard serde', () => {
   // Most fundamental primitive as it is used to identify protocol for deserialization
-  it('string', () => {
-    const serialized = serialize('foobar');
-    expect(serialized).to.be.instanceOf(Uint8Array);
+  describe('string', () => {
+    it('standard', () => {
+      const serialized = serialize('foobar');
+      expect(serialized).to.be.instanceOf(Uint8Array);
+      
+      const { value: deserialized, length } = deserialize(serialized);
+      expect(deserialized).to.equal('foobar');
+      expect(length).to.equal(20);
+    });
     
-    const { value: deserialized, length } = deserialize(serialized);
-    expect(deserialized).to.equal('foobar');
-    expect(length).to.equal(20);
+    it('empty', () => {
+      const serialized = serializeAs('string', '');
+      expect(serialized).to.be.instanceOf(Uint8Array);
+      expect(serialized.byteLength).to.equal(4);
+      
+      const { value: deserialized, length } = deserializeAs('string', serialized);
+      expect(deserialized).to.equal('');
+      expect(length).to.equal(4);
+    });
   });
   
   it('undefined/null', () => {
@@ -95,6 +108,22 @@ describe('standard serde', () => {
       const { value } = deserialize(serialize(ref));
       expect(value).to.deep.equal(ref);
     });
+    
+    it('subserde', () => {
+      {
+        const ref = patchSubserde([1, 2, 3], 'number');
+        const { value } = deserialize(serialize(ref));
+        expect(value).to.deep.equal(ref);
+        expect((value as MaybeSerde)[SUBSERDE]).to.equal('number');
+      }
+      
+      {
+        const ref = patchSubserde(['foo', 'bar', 'baz', 'foobar', 'barbaz', 'barfoo'], 'string');
+        const { value } = deserialize(serialize(ref));
+        expect(value).to.deep.equal(ref);
+        expect((value as MaybeSerde)[SUBSERDE]).to.equal('string');
+      }
+    });
   });
   
   describe('object', () => {
@@ -117,6 +146,10 @@ describe('standard serde', () => {
       };
       const { value } = deserialize(serialize(ref));
       expect(value).to.deep.equal(ref);
+    });
+    
+    it('subserde', () => {
+      throw new Error('not yet implemented')
     });
   });
   

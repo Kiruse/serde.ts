@@ -1,3 +1,4 @@
+import { patchSubserde } from "./util";
 
 const BI0 = BigInt(0);
 const BI8 = BigInt(8);
@@ -5,6 +6,7 @@ const BI64 = BigInt(64);
 const BI_MASK64 = BigInt('0xFFFFFFFFFFFFFFFF');
 
 export const SERDE = Symbol('SERDE');
+export const SUBSERDE = Symbol('SUBSERDE');
 const REGISTRY: Record<string, SerdeProtocol<any>> = {};
 
 /** Get a list of all registered protocol names. */
@@ -29,6 +31,11 @@ const TYPEDARRAYS = [
   BigInt64Array,
   BigUint64Array,
 ];
+
+export type MaybeSerde = {
+  [SERDE]?: string;
+  [SUBSERDE]?: string;
+}
 
 export function serialize(value: any): Uint8Array {
   const protocol = serializeType(value);
@@ -84,16 +91,16 @@ export function serializeAs(name: string, value: any): Uint8Array {
   return REGISTRY[name].serialize(value);
 }
 
-export function deserialize(buffer: Uint8Array, offset = 0): DeserializeResult<unknown> {
-  const { value: protocol, length: length0 } = deserializeAs('string', buffer, offset) as DeserializeResult<string>;
-  const { value, length: length1 } = deserializeAs(protocol, buffer, offset + length0);
+export function deserialize<T = unknown>(buffer: Uint8Array, offset = 0): DeserializeResult<T> {
+  const { value: protocol, length: length0 } = deserializeAs<string>('string', buffer, offset);
+  const { value, length: length1 } = deserializeAs<T>(protocol, buffer, offset + length0);
   return {
     value,
     length: length0 + length1,
   };
 }
 
-export function deserializeAs(name: string, buffer: Uint8Array, offset = 0): DeserializeResult<unknown> {
+export function deserializeAs<T = unknown>(name: string, buffer: Uint8Array, offset = 0): DeserializeResult<T> {
   if (!(name in REGISTRY))
     throw new Error(`SerdeProtocol ${name} not found`);
   return REGISTRY[name].deserialize(buffer, offset);
@@ -161,8 +168,8 @@ export class SimpleSerdeProtocol<T, S = unknown> extends SerdeProtocol<T> {
  */
 export function createProtocol<T, S = unknown>(
   name: string,
-  filter: ((value: T) => S) | undefined | null,
-  rebuild: ((data: S) => T) | undefined | null,
+  filter: ((value: T) => S),
+  rebuild: ((data: S) => T),
 ) {
   return new class extends SimpleSerdeProtocol<T, S> {
     filter(value: T): S { return filter(value) }
@@ -327,13 +334,25 @@ export const TypedArraySerde = (new class extends SerdeProtocol<ITypedArray> {
 
 export const ArraySerde = (new class extends SerdeProtocol<unknown[]> {
   serialize(value: unknown[]): Uint8Array {
-    const subs = value.map(serialize);
-    const totalByteLength = subs.reduce((total, curr) => total + curr.byteLength, 0);
+    const subprotocol: string | undefined = (value as MaybeSerde)[SUBSERDE];
+    if (subprotocol && typeof subprotocol !== 'string') throw new Error('Subprotocol must be a string (registered protocol name).');
+    if (subprotocol && !REGISTRY[subprotocol]) throw new Error(`No such SerdeProtocol: ${subprotocol}`);
     
-    const buffer = new Uint8Array(4 + totalByteLength);
-    new DataView(buffer.buffer).setUint32(0, value.length, true);
+    const subProtocolBuffer = serializeAs('string', subprotocol ?? '');
+    const subs = subprotocol
+      ? value.map(v => serializeAs(subprotocol, v))
+      : value.map(serialize);
     
-    let offset = 4;
+    const totalByteLength = subs.reduce(
+      (total, curr) => total + curr.byteLength,
+      4 + subProtocolBuffer.byteLength
+    );
+    
+    const buffer = new Uint8Array(totalByteLength);
+    buffer.set(subProtocolBuffer, 0);
+    new DataView(buffer.buffer).setUint32(subProtocolBuffer.byteLength, value.length, true);
+    
+    let offset = 4 + subProtocolBuffer.byteLength;
     subs.forEach(sub => {
       buffer.set(sub, offset);
       offset += sub.byteLength;
@@ -342,18 +361,21 @@ export const ArraySerde = (new class extends SerdeProtocol<unknown[]> {
     return buffer;
   }
   deserialize(buffer: Uint8Array, offset = 0): DeserializeResult<unknown[]> {
-    const count = new DataView(buffer.buffer, offset).getUint32(0, true);
+    const { value: subprotocol, length: subProtoLength } = deserializeAs<string>('string', buffer, offset);
+    const count = new DataView(buffer.buffer, offset).getUint32(subProtoLength, true);
     
     const value = new Array<unknown>(count);
-    let length = 4;
+    let length = 4 + subProtoLength;
     for (let i = 0; i < count; ++i) {
-      const { value: subvalue, length: sublength } = deserialize(buffer, offset + length);
+      const { value: subvalue, length: sublength } = subprotocol
+        ? deserializeAs(subprotocol, buffer, offset + length)
+        : deserialize(buffer, offset + length);
       value[i] = subvalue;
       length += sublength;
     }
     
     return {
-      value,
+      value: patchSubserde(value, subprotocol),
       length,
     };
   }
