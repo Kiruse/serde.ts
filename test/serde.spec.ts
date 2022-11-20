@@ -111,17 +111,29 @@ describe('standard serde', () => {
     
     it('subserde', () => {
       {
-        const ref = patchSubserde([1, 2, 3], 'number');
-        const { value } = deserialize(serialize(ref));
-        expect(value).to.deep.equal(ref);
-        expect((value as MaybeSerde)[SUBSERDE]).to.equal('number');
+        const ref2 = new Array(99).fill(0).map((_, i) => i);
+        const ref1 = patchSubserde(ref2.slice(), 'number');
+        
+        const { value: value1, length: length1 } = deserialize(serialize(ref1));
+        expect(value1).to.deep.equal(ref1);
+        expect((value1 as MaybeSerde)[SUBSERDE]).to.equal('number');
+        
+        const { value: value2, length: length2 } = deserialize(serialize(ref2));
+        expect(value2).to.deep.equal(ref2);
+        expect(length1).to.be.lessThan(length2);
       }
       
       {
-        const ref = patchSubserde(['foo', 'bar', 'baz', 'foobar', 'barbaz', 'barfoo'], 'string');
-        const { value } = deserialize(serialize(ref));
-        expect(value).to.deep.equal(ref);
-        expect((value as MaybeSerde)[SUBSERDE]).to.equal('string');
+        const ref2 = ['foo', 'bar', 'baz', 'foobar', 'barbaz', 'barfoo'];
+        const ref1 = patchSubserde(ref2.slice(), 'string');
+        
+        const { value: value1, length: length1 } = deserialize(serialize(ref1));
+        expect(value1).to.deep.equal(ref1);
+        expect((value1 as MaybeSerde)[SUBSERDE]).to.equal('string');
+        
+        const { value: value2, length: length2 } = deserialize(serialize(ref2));
+        expect(value2).to.deep.equal(ref2);
+        expect(length1).to.be.lessThan(length2);
       }
     });
   });
@@ -150,27 +162,37 @@ describe('standard serde', () => {
     
     it('subserde', () => {
       {
-        const ref = {
-          [SUBSERDE]: 'number',
+        const ref2 = {
           foo: 24,
           bar: 42,
           baz: 69.69,
         };
-        const { value } = deserialize(serialize(ref));
-        expect(value).to.deep.equal(ref);
-        expect((value as MaybeSerde)[SUBSERDE]).to.equal('number');
+        const ref1 = { [SUBSERDE]: 'number', ...ref2 };
+        
+        const { value: value1, length: length1 } = deserialize(serialize(ref1));
+        expect(value1).to.deep.equal(ref1);
+        expect((value1 as MaybeSerde)[SUBSERDE]).to.equal('number');
+        
+        const { value: value2, length: length2 } = deserialize(serialize(ref2));
+        expect(value2).to.deep.equal(ref2);
+        expect(length1).to.be.lessThan(length2);
       }
       
       {
-        const ref = {
-          [SUBSERDE]: 'string',
+        const ref2 = {
           foo: 'foo',
           bar: 'bar',
           baz: '69.69',
         };
-        const { value } = deserialize(serialize(ref));
-        expect(value).to.deep.equal(ref);
-        expect((value as MaybeSerde)[SUBSERDE]).to.equal('string');
+        const ref1 = { [SUBSERDE]: 'string', ...ref2 };
+        
+        const { value: value1, length: length1 } = deserialize(serialize(ref1));
+        expect(value1).to.deep.equal(ref1);
+        expect((value1 as MaybeSerde)[SUBSERDE]).to.equal('string');
+        
+        const { value: value2, length: length2 } = deserialize(serialize(ref2));
+        expect(value2).to.deep.equal(ref2);
+        expect(length1).to.be.lessThan(length2);
       }
     });
   });
