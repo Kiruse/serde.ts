@@ -149,7 +149,29 @@ describe('standard serde', () => {
     });
     
     it('subserde', () => {
-      throw new Error('not yet implemented')
+      {
+        const ref = {
+          [SUBSERDE]: 'number',
+          foo: 24,
+          bar: 42,
+          baz: 69.69,
+        };
+        const { value } = deserialize(serialize(ref));
+        expect(value).to.deep.equal(ref);
+        expect((value as MaybeSerde)[SUBSERDE]).to.equal('number');
+      }
+      
+      {
+        const ref = {
+          [SUBSERDE]: 'string',
+          foo: 'foo',
+          bar: 'bar',
+          baz: '69.69',
+        };
+        const { value } = deserialize(serialize(ref));
+        expect(value).to.deep.equal(ref);
+        expect((value as MaybeSerde)[SUBSERDE]).to.equal('string');
+      }
     });
   });
   
