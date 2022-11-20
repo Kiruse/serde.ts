@@ -1,4 +1,4 @@
-import { patchSubserde } from './util'
+import { Buffer, patchSubserde } from './util'
 
 const BI0 = BigInt(0);
 const BI8 = BigInt(8);
@@ -294,6 +294,23 @@ export const BigIntSerde = (new class extends SerdeProtocol<bigint> {
     return n;
   }
 }).register('bigint');
+
+export const BufferSerde = (new class extends SerdeProtocol<Buffer> {
+  serialize(value: Buffer): Uint8Array {
+    const buffer = new Uint8Array(value.length + 4);
+    new DataView(buffer.buffer).setUint32(0, value.length, true);
+    buffer.set(value, 4);
+    return buffer;
+  }
+  deserialize(buffer: Uint8Array, offset = 0): DeserializeResult<Buffer> {
+    const bytes = new DataView(buffer.buffer, offset).getUint32(0, true);
+    const value = globalThis.Buffer.from(buffer.slice(offset + 4, offset + bytes + 4));
+    return {
+      value,
+      length: bytes + 4,
+    };
+  }
+}).register('buffer');
 
 export const TypedArraySerde = (new class extends SerdeProtocol<ITypedArray> {
   serialize(value: ITypedArray): Uint8Array {

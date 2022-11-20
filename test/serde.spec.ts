@@ -1,6 +1,5 @@
 import { serialize, deserialize, SerdeProtocol, DeserializeResult, SERDE, serializeAs, deserializeAs, SimpleSerdeProtocol, MaybeSerde, SUBSERDE } from '../src/serde'
 import { patchSubserde } from '../src/util'
-import '../src/buffer'
 import { expect } from 'chai'
 
 describe('standard serde', () => {
