@@ -1,4 +1,4 @@
-import { createSerializeContext, DeserializeResult, ISerdeProtocol, SERDE, SerializeContext } from './types';
+import { DeserializeContext, DeserializeResult, ISerdeProtocol, SERDE, SerializeContext } from './types';
 
 export class SerdeRegistry {
   private _data: Record<string, ISerdeProtocol<any>> = {};
@@ -19,7 +19,7 @@ export class SerdeRegistry {
     return value[SERDE];
   }
   
-  serialize(value: any, ctx = createSerializeContext()) {
+  serialize(value: any, ctx = createSerializeContext(this)) {
     const protocol = this.getProtocolOf(value);
     
     const serializedProtocol = this.serializeAs('string', protocol);
@@ -31,7 +31,7 @@ export class SerdeRegistry {
     return buffer;
   }
   
-  serializeAs(protocol: string, value: any, ctx = createSerializeContext()) {
+  serializeAs(protocol: string, value: any, ctx = createSerializeContext(this)) {
     return this.getProtocol(protocol).serialize(value, ctx);
   }
   
@@ -45,7 +45,11 @@ export class SerdeRegistry {
   }
   
   deserializeAs<T>(protocol: string, buffer: Uint8Array, offset = 0) {
-    return this.getProtocol(protocol).deserialize(buffer, offset) as DeserializeResult<T>;
+    const ctx: DeserializeContext = {
+      registry: this,
+      offset,
+    };
+    return this.getProtocol(protocol).deserialize(buffer, ctx) as DeserializeResult<T>;
   }
   
   register(name: string, protocol: ISerdeProtocol<any>, force = false) {
@@ -125,3 +129,14 @@ export const getProtocolNames = () => DEFAULT_REGISTRY.names();
  * advanced use cases only.
  */
 export const getProtocolRegistry = () => DEFAULT_REGISTRY;
+
+export const createSerializeContext = (registry = getProtocolRegistry()): SerializeContext => ({
+  registry,
+  seen: new Set(),
+  refs: [],
+});
+
+export const createDeserializeContext = (registry = getProtocolRegistry()): DeserializeContext => ({
+  registry,
+  offset: 0,
+});

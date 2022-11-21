@@ -1,3 +1,5 @@
+import type { SerdeRegistry } from './registry'
+
 export const SERDE = Symbol('SERDE');
 export const SUBSERDE = Symbol('SUBSERDE');
 
@@ -24,12 +26,16 @@ export interface ITypedArray {
 
 export interface ISerdeProtocol<T> {
   serialize(value: T, ctx?: SerializeContext): Uint8Array;
-  deserialize(buffer: Uint8Array, offset?: number): DeserializeResult<T>;
+  deserialize(buffer: Uint8Array, ctx?: DeserializeContext): DeserializeResult<T>;
 }
 
 export type SerializeContext = {
+  registry: SerdeRegistry;
   seen: Set<object>;
   refs: object[];
 }
 
-export const createSerializeContext = (): SerializeContext => ({ seen: new Set<object>(), refs: [] });
+export type DeserializeContext = {
+  registry: SerdeRegistry;
+  offset: number;
+}

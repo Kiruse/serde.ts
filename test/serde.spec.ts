@@ -1,7 +1,7 @@
 import { SerdeProtocol, SimpleSerdeProtocol } from '../src/serde'
 import { patchSubserde } from '../src/util'
 import { expect } from 'chai'
-import { DeserializeResult, MaybeSerde, SERDE, SUBSERDE } from '../src/types';
+import { DeserializeContext, DeserializeResult, MaybeSerde, SERDE, SerializeContext, SUBSERDE } from '../src/types';
 import { deserialize, deserializeAs, serialize, serializeAs } from '../src/registry';
 
 describe('standard serde', () => {
@@ -219,11 +219,11 @@ describe('standard serde', () => {
       }
       
       ;(new class extends SerdeProtocol<TestType> {
-        doSerialize(_: any, value: TestType): Uint8Array {
-          return serializeAs('object', value);
+        doSerialize(ctx: SerializeContext, value: TestType): Uint8Array {
+          return ctx.registry.serializeAs('object', value, ctx);
         }
-        doDeserialize(buffer: Uint8Array, offset: number): DeserializeResult<TestType> {
-          const { value, length } = deserializeAs('object', buffer, offset) as any;
+        doDeserialize({ registry, offset }: DeserializeContext, buffer: Uint8Array): DeserializeResult<TestType> {
+          const { value, length } = registry.deserializeAs('object', buffer, offset) as any;
           return {
             value: {
               [SERDE]: 'test::inject',
