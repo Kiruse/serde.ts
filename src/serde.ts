@@ -1,22 +1,11 @@
+import { deserialize, deserializeAs, getProtocolRegistry, serialize, serializeAs } from './registry';
+import { createSerializeContext, DeserializeResult, ISerdeProtocol, ITypedArray, MaybeSerde, SERDE, SerializeContext, SUBSERDE } from './types';
 import { Buffer, patchSubserde } from './util'
 
 const BI0 = BigInt(0);
 const BI8 = BigInt(8);
 const BI64 = BigInt(64);
 const BI_MASK64 = BigInt('0xFFFFFFFFFFFFFFFF');
-
-export const SERDE = Symbol('SERDE');
-export const SUBSERDE = Symbol('SUBSERDE');
-const REGISTRY: Record<string, SerdeProtocol<any>> = {};
-
-/** Get a list of all registered protocol names. */
-export const getProtocolNames = () => Object.keys(REGISTRY);
-/** Get the protocol registry.
- * 
- * **WARNING:** This is not intended for the average use case and can mess things up. It is exposed here for more
- * advanced use cases only.
- */
-export const getProtocolRegistry = () => REGISTRY;
 
 const TYPEDARRAYS = [
   Int8Array,
@@ -32,91 +21,10 @@ const TYPEDARRAYS = [
   BigUint64Array,
 ];
 
-export type SerializeContext = {
-  seen: Set<object>;
-  refs: object[];
-}
-
-export type MaybeSerde = {
-  [SERDE]?: string;
-  [SUBSERDE]?: string;
-}
-
-export function serialize(value: any, ctx = createSerializeContext()): Uint8Array {
-  const protocol = serializeType(value);
-  
-  const serializedProtocol = serializeAs('string', protocol);
-  const serializedValue = serializeAs(protocol, value, ctx);
-  
-  const buffer = new Uint8Array(serializedProtocol.length + serializedValue.length);
-  buffer.set(serializedProtocol, 0);
-  buffer.set(serializedValue, serializedProtocol.length);
-  return buffer;
-}
-
-function serializeType(value: any): string {
-  if (typeof value === 'symbol')
-    throw new Error('Cannot de/serialize symbols');
-  if (typeof value === 'function')
-    throw new Error('Cannot de/serialize functions');
-  
-  if (['string', 'number', 'bigint'].includes(typeof value))
-    return typeof value;
-  if (value === undefined)
-    return 'undef';
-  if (value === null)
-    return 'null';
-  
-  if (typeof value !== 'object')
-    throw new Error(`Unsupported type ${typeof value}`);
-  
-  if (SERDE in value) {
-    if (typeof value[SERDE] !== 'string')
-      throw new Error('[SERDE] property should be the name of a SerdeProtocol');
-    return value[SERDE];
-  }
-  
-  if (globalThis.Buffer?.isBuffer(value))
-    return 'buffer';
-  
-  if (value.buffer instanceof ArrayBuffer)
-    return 'typedarray';
-  if (value instanceof ArrayBuffer)
-    return 'arraybuffer';
-  
-  if (Array.isArray(value))
-    return 'array';
-  
-  if (Object.getPrototypeOf(value) !== Object.prototype)
-    throw new Error('Cannot auto-de/serialize custom class instances');
-  return 'object';
-}
-
-export function serializeAs(name: string, value: any, ctx = createSerializeContext()): Uint8Array {
-  if (!(name in REGISTRY))
-    throw new Error(`SerdeProtocol ${name} not found`);
-  return REGISTRY[name].serialize(value, ctx);
-}
-
-export function deserialize<T = unknown>(buffer: Uint8Array, offset = 0): DeserializeResult<T> {
-  const { value: protocol, length: length0 } = deserializeAs<string>('string', buffer, offset);
-  const { value, length: length1 } = deserializeAs<T>(protocol, buffer, offset + length0);
-  return {
-    value,
-    length: length0 + length1,
-  };
-}
-
-export function deserializeAs<T = unknown>(name: string, buffer: Uint8Array, offset = 0): DeserializeResult<T> {
-  if (!(name in REGISTRY))
-    throw new Error(`SerdeProtocol ${name} not found`);
-  return REGISTRY[name].deserialize(buffer, offset);
-}
-
-export abstract class SerdeProtocol<T> {
+export abstract class SerdeProtocol<T> implements ISerdeProtocol<T> {
   serialize(value: T, ctx = createSerializeContext()): Uint8Array {
     if (typeof value === 'object') {
-      const obj = value as object;
+      const obj = value as unknown as object;
       if (ctx.seen.has(obj) && !ctx.refs.includes(obj))
         ctx.refs.push(obj);
       ctx.seen.add(obj);
@@ -128,10 +36,9 @@ export abstract class SerdeProtocol<T> {
   }
   abstract doSerialize(ctx: SerializeContext, value: T): Uint8Array;
   abstract doDeserialize(buffer: Uint8Array, offset: number): DeserializeResult<T>;
+  
   register(name: string, force = false) {
-    if (name in REGISTRY && !force)
-      throw new Error(`SerdeProtocol ${name} already exists`);
-    REGISTRY[name] = this;
+    getProtocolRegistry().register(name, this, force);
     return this;
   }
 }
@@ -194,17 +101,6 @@ export function createProtocol<T, S = unknown>(
     filter(value: T): S { return filter(value) }
     rebuild(data: S): T { return rebuild(data) }
   }(name);
-}
-
-/** The result of a deserialization provides the deserialized value
- * and the number of consumed bytes. The latter is used to further
- * deserialize other values contained within the same buffer.
- */
-export type DeserializeResult<T> = {
-  /** Deserialized value */
-  value: T;
-  /** Number of consumed bytes */
-  length: number;
 }
 
 export const StringSerde = (new class extends SerdeProtocol<string> {
@@ -483,13 +379,6 @@ export const ObjectSerde = (new class extends SerdeProtocol<object> {
 function getSubProtocol(value: any): string | undefined {
   const proto = (value as MaybeSerde)[SUBSERDE];
   if (proto && typeof proto !== 'string') throw new Error('Subprotocol must be a string (registered protocol name).');
-  if (proto && !REGISTRY[proto]) throw new Error(`No such SerdeProtocol: ${proto}`);
+  if (proto && !getProtocolRegistry().getProtocol(proto)) throw new Error(`No such SerdeProtocol: ${proto}`);
   return proto;
 }
-
-interface ITypedArray {
-  BYTES_PER_ELEMENT: number;
-  buffer: ArrayBuffer;
-}
-
-export const createSerializeContext = (): SerializeContext => ({ seen: new Set<object>(), refs: [] });

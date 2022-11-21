@@ -1,6 +1,8 @@
-import { serialize, deserialize, SerdeProtocol, DeserializeResult, SERDE, serializeAs, deserializeAs, SimpleSerdeProtocol, MaybeSerde, SUBSERDE } from '../src/serde'
+import { SerdeProtocol, SimpleSerdeProtocol } from '../src/serde'
 import { patchSubserde } from '../src/util'
 import { expect } from 'chai'
+import { DeserializeResult, MaybeSerde, SERDE, SUBSERDE } from '../src/types';
+import { deserialize, deserializeAs, serialize, serializeAs } from '../src/registry';
 
 describe('standard serde', () => {
   // Most fundamental primitive as it is used to identify protocol for deserialization

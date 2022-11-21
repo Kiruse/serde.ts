@@ -1,4 +1,4 @@
-import { SERDE, SUBSERDE } from './serde'
+import { SERDE, SUBSERDE } from './types'
 
 export type Global = typeof globalThis;
 export type Buffer = Global extends { Buffer: infer B }
