@@ -217,10 +217,10 @@ describe('standard serde', () => {
       }
       
       ;(new class extends SerdeProtocol<TestType> {
-        serialize(value: TestType): Uint8Array {
+        doSerialize(_: any, value: TestType): Uint8Array {
           return serializeAs('object', value);
         }
-        deserialize(buffer: Uint8Array, offset: number): DeserializeResult<TestType> {
+        doDeserialize(buffer: Uint8Array, offset: number): DeserializeResult<TestType> {
           const { value, length } = deserializeAs('object', buffer, offset) as any;
           return {
             value: {
