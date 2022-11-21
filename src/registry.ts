@@ -111,6 +111,11 @@ export const deserializeAs = <T>(protocol: string, buffer: Uint8Array, offset?: 
 
 let DEFAULT_REGISTRY: SerdeRegistry = new DefaultSerdeRegistry();
 
+export function setDefaultRegistry(registry: SerdeRegistry) {
+  DEFAULT_REGISTRY = registry;
+  return registry;
+}
+
 /** Get a list of all registered protocol names. */
 export const getProtocolNames = () => DEFAULT_REGISTRY.names();
 
