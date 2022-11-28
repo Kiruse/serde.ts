@@ -15,143 +15,86 @@ When TypeScript's decorators feature matures, serde will use these to deliver an
 - [serde.ts](#serdets)
   - [Table of Contents](#table-of-contents)
   - [Usage](#usage)
-    - [`createProtocol`](#createprotocol)
-    - [`SerdeProtocol<T>`](#serdeprotocolt)
-  - [Buffer Protocol](#buffer-protocol)
-  - [Utilities](#utilities)
-    - [`patchSerde<T>(obj: T, protocol: string): T`](#patchserdetobj-t-protocol-string-t)
+  - [Simple SerDe](#simple-serde)
+  - [Circular Reference Resolution](#circular-reference-resolution)
+  - [Caveats](#caveats)
 
 ## Usage
-For the simplest use, you'll only use `serialize` and `deserialize`:
-
-```typescript
-import { serialize, deserialize } from '@kiruse/serde'
-
-let serialized = serialize({
-  foo: 'bar',
-  answer: 42,
-});
-
-console.log(deserialize(serialized));
-// Object { foo: 'bar', answer: 42 }
-```
-
-If you need TypeScript support you may use the protocols directly:
-
-```typescript
-import { NumberSerde } from '@kiruse/serde'
-
-let serialized = NumberSerde.serialize(42);
-let deserialized = NumberSerde.deserialize(serialized).value;
-// deserialized is a `number`
-```
-
-Standard protocols for the various basic types exist. You can get a list of all currently registered protocols with `getProtocolNames()`.
-
-Note that the returned data of `deserialize` is an object with two properties: `value`, which resembles your deserialized data, and `length`, which resembles the number of bytes read. The latter is used to tightly pack different data together into one continuous `Uint8Array`.
-
-### `createProtocol`
-Unless you have special needs for the binary format of your data type, `createProtocol` provides a streamlined workflow to easily integrate a custom type with serde. Following is its signature:
-
-```typescript
-function createProtocol<T, S>(
-  name: string,
-  filter: ((value: T) => S) | undefined | null,
-  rebuild: ((data: S) => T) | undefined | null,
-): SimpleSerdeProtocol<T, S>;
-```
-
-`name` will be the name with which your protocol is registered. This name is prefixed to your binary data when calling `serialize`, and used to restore your data when calling `deserialize`. Name must be unique, otherwise the system will throw.
-
-`filter` allows you to extract a simplified data-only version of your underlying type. This can also be used to cut out data which can be inferred from other properties, or perhaps from the program context.
-
-`rebuild` then allows reconstructing your underlying type from the data returned by `filter`. Accordingly, it can also be used to enrich your object.
-
-Although it returns a `SimpleSerdeProtocol` which you could implement yourself, building it with `createProtocol` is more convenient as both `S` and `T` type parameters can be inferred from `filter` and `rebuild`. Effectively, you normally don't have to explicitly define `S`.
+*serde* default-exports the `SerdeProtocol`, which acts like a micro-cosmos of de/serialization subprotocols. Typically, a single such instance will suffice, but it is possible to override the default behavior and fully customize the entire pipeline - though at some point one loses all benefit of using this library altogether.
 
 **Example**
-
 ```typescript
-import { SERDE, createProtocol } from './src';
+import SerdeProtocol, { SERDE } from '@kiruse/serde'
+import { expect } from 'chai'
 
-type MyType = {
-  [SERDE]: 'my-type';
-  foo: string;
-  bar: number;
-  deserialized: boolean;
+class MyType {
+  [SERDE] = 'my-type';
+  
+  constructor(
+    public someNumber = 42,
+    public someString = 'foobar',
+  ) {}
 }
 
-const MyProtocol = createProtocol(
-  'my-type',
-  ({ foo, bar }: MyType) => ({ foo, bar }),
-  ({ foo, bar }): MyType => ({
-    [SERDE]: 'my-type',
-    foo,
-    bar,
-    deserialized: true,
-  }),
-);
+const serde = SerdeProtocol.standard()
+  .sub('my-type',
+    (ctx, writer, value: MyType) => {
+      writer.writeNumber(value.someNumber);
+      writer.writeString(value.someString);
+    },
+    (ctx, reader) => {
+      return {
+        [SERDE]: 'my-type',
+        someNumber: reader.readNumber(),
+        someString: reader.readString(),
+      }
+    },
+  );
 
-const serialized = MyProtocol.serialize({
-  [SERDE]: 'my-type',
-  foo: 'baz',
-  bar: 42,
-  deserialized: false,
-});
-console.log(MyProtocol.deserialize(serialized).value);
-// {
-//   [SERDE]: 'my-type',
-//   foo: 'baz',
-//   bar: 42,
-//   deserialized: true,
-// }
+const myType1 = new MyType();
+const myType2 = new MyType(69, 'barfoo');
+
+const serialized1 = serde.serialize(myType1);
+const serialized2 = serde.serializeAs(myType2);
+
+expect(serde.deserialize(serialized1)).to.deep.equal(myType1);
+expect(serde.deserializeAs(serialized2)).to.deep.equal(myType2);
 ```
 
-### `SerdeProtocol<T>`
-You may choose to implement `SerdeProtocol` directly. This variant grants absolute control over the de/serialization algorithms in place. It is more appropriate, for example, for tabular or schematic data formats, as you can pad and align data within a row for predictable navigation within the binary data without the need to deserialize everything first.
+There is a difference between `serialize` and `serializeAs`, as well as their deserialization counterparts: `serialize` and `deserialize` resort to `any` and `unknown` respectively, whereas `serializeAs` and `deserializeAs` are fully typed. The type information is extracted from the call to `sub` (and assumes serializer & deserializer use the same type as input/output), and associated with the protocol name (in the above example `my-type`). In other words, `serialized1 is unknown`, whereas `serialized2 is MyType`.
 
-Implementing a `SerdeProtocol` requires implementing its `serialize` and `deserialize` methods. Below shows my code for the implementation of `SerdeProtocol<number>`.
+Calling `SerdeProtocol.standard()` creates a new `SerdeProtocol` with default implementations for various built-in types, such as Buffers, ArrayBuffers, and TypedArrays. One may pass a derived `SerdeProtocol` to populate *it* with the standard implementations instead, e.g. `SerdeProtocol.standard(new MySerdeProtocol())`. This is to allow customizing the `SerdeProtocol.getSubProtocolOf()` member method, which integrates built-in types with *serde* through specific rules.
 
-Once implemented, call `protocol.register(name)` on an instance of your protocol to register it with *serde*. You may also forcefully override an existing protocol by passing `true` as second parameter.
-
-**Example**
+## Simple SerDe
+If your needs for de/serialization are not very specific, you may simply create a derived standard object protocol:
 
 ```typescript
-import { DeserializeResult, SerdeProtocol } from '@kiruse/serde'
+import { SerdeProtocol, SERDE } from '@kiruse/serde'
 
-;(new class extends SerdeProtocol<number> {
-  serialize(value: number): Uint8Array {
-    const buffer = new Uint8Array(8);
-    new DataView(buffer.buffer).setFloat64(0, value, true);
-    return buffer;
-  }
+class MyType {
+  [SERDE] = 'my-type';
   
-  deserialize(buffer: Uint8Array, offset = 0): DeserializeResult<number> {
-    return {
-      value: new DataView(buffer.buffer, offset).getFloat64(0, true),
-      length: 8,
-    };
-  }
-}).register('number');
+  constructor(
+    public someNumber = 42,
+    public someString = 'foobar',
+  ) {}
+}
+
+const serde = SerdeProtocol.standard()
+  .derive('my-type',
+    (val: MyType) => ({ num: val.someNumber, str: val.someString }),
+    data => new MyType(data.num, data.str),
+  )
 ```
 
-Note that this example is written in TypeScript and respective transformations may apply depending on your target runtime environment.
+The `derive` method takes a `filter` and a `rebuild` callback. `filter` is expected to derive a simplified, data-only version of the input object, which can be fed back to `rebuild` to reconstruct a valid instance of the underlying type. The generated subprotocol relies on the `object` subprotocol to de/serialize this data-only object.
 
-This is a simple, context-less protocol. Depending on your needs, you may create protocols dependent on some external state.
+## Circular Reference Resolution
+In order to resolve circular references, the `standard` protocol serializes nested objects by reference, and each reference is stored sequentially in the underlying binary buffer. However, *serde* is not magic, and I want to leave enough room for full control, so `standard` only considers objects stored in the `ctx.refs` property of the first argument `ctx` passed to the serializer callbacks. Then, when calling `SerdeProtocol.serialize`, any value serialized with `object` is serialized as `reference` instead - save for the root object itself. This requires that the `ctx` argument be passed down to `serialize`. Note that this does not apply when calling `serializeAs` directly.
 
-## Buffer Protocol
-Note that because this library is also intended to be run in the browser, but `Buffer` is typically a NodeJS-exclusive type, you must manually import its `SerdeProtocol`. You can either import it for side effects, or for its default export, depending on your needs:
+## Caveats
+It is impossible to de/serialize neither symbols nor functions:
 
-```typescript
-import '@kiruse/serde'
+While technically possible, deserializing **functions** (which includes constructors) would create duplicates as we cannot reference the original function without another global registry. Further, the prototype model would render this code highly complex. Further further, built-in/native functions cannot be de/serialized regardless. Finally, it poses an extreme security risk of code injection which should be avoided at all costs.
 
-// or
-
-import BufferSerde from '@kiruse/serde'
-```
-
-## Utilities
-There are a few utilities, e.g. to help work around TypeScript restrictions:
-
-### `patchSerde<T>(obj: T, protocol: string): T`
-Monkeypatches `obj[SERDE] = protocol`. This is convenient when working with TypeScript and patching a SerdeProtocol into arbitrary types the input `obj`.
+**Symbols** can technically be de/serialized, but as Symbols are unique at runtime, deserializing would again create incompatible duplicates. It would be possible to support through another registry, but this would once again require associating them with less unique strings, defeating the absolute uniqueness of symbols. In other words, two symbols can share the same display text. You can create your own `Symbol('SERDE')` symbol and it would still be unique from this library's `SERDE` symbol, thus not usable to specify the `SerdeProtocol`.

@@ -1,3 +1,4 @@
+import hashsum from 'hash-sum'
 import { SERDE, SUBSERDE } from './types'
 
 export type Global = typeof globalThis;
@@ -18,4 +19,7 @@ export function patchSubserde<T>(obj: T, subProtocol: string) {
   return obj;
 }
 
+export const hash = (value: any) => parseInt(hashsum(value), 16);
+
 export const isArrayLike = (value: any): value is unknown[] => 'length' in value && 0 in value && value.length-1 in value;
+export const isObject = (value: any): value is object => typeof value === 'object';
