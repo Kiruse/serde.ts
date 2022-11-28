@@ -23,8 +23,23 @@ const TYPEDARRAYS = [
   BigUint64Array,
 ] as const;
 
+export type StandardProtocolMap = {
+  boolean: boolean,
+  number: number,
+  string: string,
+  bigint: bigint,
+  undef: undefined,
+  null: null,
+  buffer: Buffer,
+  arraybuffer: ArrayBuffer,
+  typedarray: ArrayBufferView,
+  array: any[],
+  object: object,
+  reference: Reference,
+}
+
 export class SerdeBase<M extends TypeMap = {}> {
-  constructor(protected subprotocols: Record<string, SubProtocol<any>>, protected hashes = new Map<number, string>()) {}
+  constructor(protected subprotocols: Record<string, SubProtocol<any>> = {}, protected hashes = new Map<number, string>()) {}
   
   getSubProtocolOf(value: any): string {
     if (typeof value === 'symbol')
@@ -104,10 +119,10 @@ export class SerdeBase<M extends TypeMap = {}> {
     return this.subprotocols[subprotocol].deserialize(ctx, reader) as any;
   }
   
-  set<P extends string & keyof M, T>(
+  set<P extends string & keyof M>(
     subprotocol: P,
-    serialize: Serializer<T>,
-    deserialize: Deserializer<T>,
+    serialize: Serializer<M[P]>,
+    deserialize: Deserializer<M[P]>,
     force = false,
   ) {
     const hashed = hash(subprotocol);
@@ -128,33 +143,15 @@ export class SerdeBase<M extends TypeMap = {}> {
     this.hashes.set(hashed, subprotocol);
     return this;
   }
-}
-
-/** The epicentral SerdeProtocol. Instantiate with `SerdeProtocol.standard()`. */
-export default class SerdeProtocol<S extends SubProtocolMap = {}> extends SerdeBase<TypeMapFromSubProtocols<S>> {
-  constructor(protected subprotocols: S, protected hashes = new Map<number, string>()) {
-    super(subprotocols, hashes);
-  }
   
-  /** Register a new named subprotocol. */
-  sub<P extends string, T>(
+  setSimple<P extends string & keyof M, D>(
     subprotocol: P,
-    serialize: Serializer<T>,
-    deserialize: Deserializer<T>,
-    force = false,
-  ): SerdeProtocol<S & { [subprotocol in P]: SubProtocol<T> }> {
-    this.set(subprotocol, serialize, deserialize, force);
-    return this as any;
-  }
-  
-  derive<P extends string, T, D>(
-    subprotocol: P,
-    filter: (value: T) => D,
-    rebuild: (data: D) => T,
+    filter: (value: M[P]) => D,
+    rebuild: (data: D) => M[P],
     force = false,
   ) {
-    return this.sub(subprotocol,
-      (ctx, writer, value: T) => {
+    return this.set(subprotocol,
+      (ctx, writer, value) => {
         ctx.serde.serialize(filter(value), writer, ctx);
       },
       (ctx, reader) => rebuild(ctx.serde.deserialize(reader, ctx) as any),
@@ -162,22 +159,21 @@ export default class SerdeProtocol<S extends SubProtocolMap = {}> extends SerdeB
     );
   }
   
-  static create() { return new SerdeProtocol({}) }
-  static standard(blank = SerdeProtocol.create()) {
+  static standard<M extends StandardProtocolMap>(blank = new SerdeBase<M>()) {
     return blank
-      .sub('boolean',
+      .set('boolean',
         (_, writer, value: boolean) => {
           writer.writeByte(value ? 1 : 0);
         },
         (_, reader) => !!reader.readByte(),
       )
-      .sub('number',
+      .set('number',
         (_, writer, value: number) => {
           writer.writeNumber(value);
         },
         (_, reader) => reader.readNumber(),
       )
-      .sub('string',
+      .set('string',
         (_, writer, value: string) => {
           writer.writeUInt32(value.length);
           writer.writeBytes(encode(value));
@@ -188,35 +184,35 @@ export default class SerdeProtocol<S extends SubProtocolMap = {}> extends SerdeB
           return decode(bytes);
         }
       )
-      .sub('bigint',
+      .set('bigint',
         (_, writer, value: bigint) => {
           writer.writeBigint(value);
         },
         (_, reader) => reader.readBigint(),
       )
-      .sub('undef',
+      .set('undef',
         () => {},
         () => undefined,
       )
-      .sub('null',
+      .set('null',
         () => {},
         () => null,
       )
-      .sub('buffer',
+      .set('buffer',
         ({ serde }, writer, value: Buffer) => {
           const bytes = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
           serde.serializeAs('arraybuffer', bytes, writer);
         },
         ({ serde }, reader) => globalThis.Buffer.from(serde.deserializeAs('arraybuffer', reader)),
       )
-      .sub('arraybuffer',
+      .set('arraybuffer',
         (_, writer, value: ArrayBuffer) => {
           writer.writeUInt32(value.byteLength);
           writer.writeBytes(new Uint8Array(value));
         },
         (_, reader) => reader.readBytes(reader.readUInt32()).buffer,
       )
-      .sub('typedarray',
+      .set('typedarray',
         ({ serde }, writer, value: ArrayBufferView) => {
           const type = TYPEDARRAYS.findIndex(con => con && value instanceof con);
           if (type ===  0) throw new Error('How the fuck...');
@@ -235,9 +231,9 @@ export default class SerdeProtocol<S extends SubProtocolMap = {}> extends SerdeB
           return new con(bytes);
         },
       )
-      .sub('array', serializeObject, deserializeObject)
-      .sub('object', serializeObject, deserializeObject)
-      .sub('reference',
+      .set('array', serializeObject, deserializeObject)
+      .set('object', serializeObject, deserializeObject)
+      .set('reference',
         (_, writer, ref: Reference) => {
           writer.writeUInt32(ref.id);
         },
@@ -246,6 +242,41 @@ export default class SerdeProtocol<S extends SubProtocolMap = {}> extends SerdeB
           return new Reference(id);
         },
       )
+  }
+}
+
+/** The epicentral SerdeProtocol. Instantiate with `SerdeProtocol.standard()`. */
+export default class SerdeProtocol<S extends SubProtocolMap = {}> extends SerdeBase<TypeMapFromSubProtocols<S>> {
+  constructor(protected subprotocols: S, protected hashes = new Map<number, string>()) {
+    super(subprotocols, hashes);
+  }
+  
+  /** Register a new named subprotocol. */
+  sub<P extends string, T>(
+    subprotocol: P,
+    serialize: Serializer<T>,
+    deserialize: Deserializer<T>,
+    force = false,
+  ): SerdeProtocol<S & { [subprotocol in P]: SubProtocol<T> }> {
+    // cheat mode engaged!
+    //@ts-ignore
+    this.set(subprotocol, serialize, deserialize, force);
+    return this as any;
+  }
+  
+  derive<P extends string, T, D>(
+    subprotocol: P,
+    filter: (value: T) => D,
+    rebuild: (data: D) => T,
+    force = false,
+  ): SerdeProtocol<S & { [p in P]: SubProtocol<T> }> {
+    //@ts-ignore
+    return this.setSimple(subprotocol, filter, rebuild, force);
+  }
+  
+  static create() { return new SerdeProtocol({}) }
+  static standard(blank = SerdeProtocol.create()) {
+    return SerdeBase.standard(blank) as any;
   }
 }
 
