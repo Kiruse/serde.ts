@@ -1,5 +1,5 @@
 import Reader from './reader'
-import { DeReference, Deserializer, Reference, SERDE, Serializer, SubProtocol, SubProtocolMap, SubProtocolType, SUBSERDE } from './types'
+import { DeReference, Deserializer, Reference, SERDE, Serializer, SubProtocol, SubProtocolMap, SubProtocolType, SUBSERDE, TypeMap, TypeMapFromSubProtocols } from './types'
 import { Buffer, hash, isArrayLike } from './util'
 import Writer from './writer'
 
@@ -23,9 +23,8 @@ const TYPEDARRAYS = [
   BigUint64Array,
 ] as const;
 
-/** The epicentral SerdeProtocol. Instantiate with `SerdeProtocol.standard()`. */
-export default class SerdeProtocol<S extends SubProtocolMap = {}> {
-  constructor(private subprotocols: S, private hashes = new Map<number, string>()) {}
+export class SerdeBase<M extends TypeMap = {}> {
+  constructor(protected subprotocols: Record<string, SubProtocol<any>>, protected hashes = new Map<number, string>()) {}
   
   getSubProtocolOf(value: any): string {
     if (typeof value === 'symbol')
@@ -79,9 +78,9 @@ export default class SerdeProtocol<S extends SubProtocolMap = {}> {
     return this.deserializeAs(subprotocol, reader, ctx);
   }
   
-  serializeAs<P extends string & keyof S>(
+  serializeAs<P extends string & keyof M>(
     subprotocol: P,
-    value: SubProtocolType<S[P]>,
+    value: M[P],
     writer = new Writer(),
     ctx = new SerializeContext(this),
   ) {
@@ -91,13 +90,13 @@ export default class SerdeProtocol<S extends SubProtocolMap = {}> {
     return writer;
   }
   
-  deserializeAs<P extends string & keyof S>(subprotocol: P, bytes: Uint8Array): SubProtocolType<S[P]>;
-  deserializeAs<P extends string & keyof S>(subprotocol: P, reader: Reader, ctx?: DeserializeContext): SubProtocolType<S[P]>;
-  deserializeAs<P extends string & keyof S>(
+  deserializeAs<P extends string & keyof M>(subprotocol: P, bytes: Uint8Array): M[P];
+  deserializeAs<P extends string & keyof M>(subprotocol: P, reader: Reader, ctx?: DeserializeContext): M[P];
+  deserializeAs<P extends string & keyof M>(
     subprotocol: P,
     source: Uint8Array | Reader,
     ctx = new DeserializeContext(this),
-  ): SubProtocolType<S[P]> {
+  ) {
     const reader = source instanceof Reader ? source : new Reader(source);
     
     if (!(subprotocol in this.subprotocols))
@@ -105,8 +104,7 @@ export default class SerdeProtocol<S extends SubProtocolMap = {}> {
     return this.subprotocols[subprotocol].deserialize(ctx, reader) as any;
   }
   
-  /** Register a new named subprotocol. */
-  sub<P extends string, T>(
+  set<P extends string & keyof M, T>(
     subprotocol: P,
     serialize: Serializer<T>,
     deserialize: Deserializer<T>,
@@ -123,16 +121,30 @@ export default class SerdeProtocol<S extends SubProtocolMap = {}> {
       }
     }
     
-    return new SerdeProtocol<S & { [p in P]: SubProtocol<T> }>(
-      {
-        ...this.subprotocols,
-        [subprotocol]: {
-          serialize,
-          deserialize,
-        },
-      },
-      new Map([...this.hashes, [hashed, subprotocol]]),
-    );
+    this.subprotocols[subprotocol] = {
+      serialize,
+      deserialize,
+    };
+    this.hashes.set(hashed, subprotocol);
+    return this;
+  }
+}
+
+/** The epicentral SerdeProtocol. Instantiate with `SerdeProtocol.standard()`. */
+export default class SerdeProtocol<S extends SubProtocolMap = {}> extends SerdeBase<TypeMapFromSubProtocols<S>> {
+  constructor(protected subprotocols: S, protected hashes = new Map<number, string>()) {
+    super(subprotocols, hashes);
+  }
+  
+  /** Register a new named subprotocol. */
+  sub<P extends string, T>(
+    subprotocol: P,
+    serialize: Serializer<T>,
+    deserialize: Deserializer<T>,
+    force = false,
+  ): SerdeProtocol<S & { [subprotocol in P]: SubProtocol<T> }> {
+    this.set(subprotocol, serialize, deserialize, force);
+    return this as any;
   }
   
   derive<P extends string, T, D>(
@@ -237,9 +249,9 @@ export default class SerdeProtocol<S extends SubProtocolMap = {}> {
   }
 }
 
-export class SerializeContext {
+export class SerializeContext<M extends TypeMap = any> {
   constructor(
-    public serde: SerdeProtocol<any>,
+    public serde: SerdeBase<M>,
     public refs = new Map<object, Reference>(),
     public nextId = 0,
   ) {}
@@ -258,9 +270,9 @@ export class SerializeContext {
   }
 }
 
-export class DeserializeContext {
+export class DeserializeContext<M extends TypeMap = any> {
   constructor(
-    public serde: SerdeProtocol<any>,
+    public serde: SerdeBase<M>,
     public refs = new Set<DeReference>(),
   ) {}
   

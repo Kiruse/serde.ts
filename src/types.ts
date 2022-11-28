@@ -5,9 +5,17 @@ import type Writer from './writer'
 export const SERDE = Symbol('SERDE');
 export const SUBSERDE = Symbol('SUBSERDE');
 
+export type TypeMap = {
+  [subprotocol: string]: unknown;
+};
+
 export type SubProtocolMap = {
   [subprotocol: string]: SubProtocol;
 };
+
+export type TypeMapFromSubProtocols<S extends SubProtocolMap> = {
+  [s in keyof S]: SubProtocolType<S[s]>;
+}
 
 export type SubProtocol<T = unknown> = {
   serialize: Serializer<T>;
