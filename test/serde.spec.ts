@@ -231,7 +231,7 @@ describe('standard serde', () => {
         .derive('test::derive',
           ({ foo, bar }: TestType) => ({ foo, bar }),
           ({ foo, bar }) => ({
-            [SERDE]: 'test::derive',
+            [SERDE]: 'test::derive' as const,
             foo,
             bar,
           }),
