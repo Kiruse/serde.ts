@@ -1,5 +1,5 @@
 import Reader from './reader'
-import { DeReference, Deserializer, Reference, SERDE, Serializer, SubProtocol, SubProtocolMap, SubProtocolType, SUBSERDE, TypeMap, TypeMapFromSubProtocols } from './types'
+import { DeReference, Deserializer, Reference, SERDE, Serializer, SubProtocol, TypeMap } from './types'
 import { Buffer, hash, isArrayLike } from './util'
 import Writer from './writer'
 
@@ -7,6 +7,11 @@ const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 const encode = textEncoder.encode.bind(textEncoder);
 const decode = textDecoder.decode.bind(textDecoder);
+
+type JoinTypeMap<T extends SerdeBase, M2 extends TypeMap> =
+  T extends SerdeBase<infer M1>
+  ? SerdeBase<M1 & M2>
+  : never;
 
 const TYPEDARRAYS = [
   null,
@@ -159,7 +164,9 @@ export class SerdeBase<M extends TypeMap = {}> {
     );
   }
   
-  static standard<M extends StandardProtocolMap>(blank = new SerdeBase<M>()) {
+  static standard<B extends SerdeBase<StandardProtocolMap>>(blank: B): B;
+  static standard(): SerdeBase<StandardProtocolMap>;
+  static standard(blank = new SerdeBase<StandardProtocolMap>()) {
     return blank
       .set('boolean',
         (_, writer, value: boolean) => {
@@ -246,12 +253,12 @@ export class SerdeBase<M extends TypeMap = {}> {
 }
 
 /** The epicentral SerdeProtocol. Instantiate with `SerdeProtocol.standard()`. */
-export default class SerdeProtocol<S extends SubProtocolMap = {}> extends SerdeBase<TypeMapFromSubProtocols<S>> {
-  constructor(protected subprotocols: S, protected hashes = new Map<number, string>()) {
-    super(subprotocols, hashes);
-  }
-  
-  /** Register a new named subprotocol. */
+export default class SerdeProtocol<S extends TypeMap = {}> extends SerdeBase<S> {
+  /** Register a new named subprotocol.
+   * 
+   * *Important:* As a new type is derived, you must store this return
+   * value as your new protocol, otherwise type information is lost!
+   */
   sub<P extends string, T>(
     subprotocol: P,
     serialize: Serializer<T>,
@@ -274,9 +281,8 @@ export default class SerdeProtocol<S extends SubProtocolMap = {}> extends SerdeB
     return this.setSimple(subprotocol, filter, rebuild, force);
   }
   
-  static create() { return new SerdeProtocol({}) }
-  static standard(blank = SerdeProtocol.create()) {
-    return SerdeBase.standard(blank) as any;
+  static standard(blank = new SerdeProtocol({})) {
+    return SerdeBase.standard(blank) as SerdeProtocol<StandardProtocolMap>;
   }
 }
 
