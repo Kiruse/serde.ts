@@ -81,6 +81,25 @@ describe('standard serde', () => {
     }
   });
   
+  it('regex', () => {
+    {
+      const ref = /foobar/;
+      expect(standard.deserialize(standard.serialize(ref))).to.deep.equal(ref);
+    }
+    
+    {
+      const ref = /^some [other] regexp?$/
+      const bytes = standard.serializeAs('regexp', ref).compress().buffer;
+      expect(standard.deserializeAs('regexp', bytes)).to.deep.equal(ref);
+    }
+    
+    {
+      const ref = /^yet (an)?other regexp?$/i
+      const bytes = standard.serializeAs('regex', ref).compress().buffer;
+      expect(standard.deserializeAs('regex', bytes)).to.deep.equal(ref);
+    }
+  });
+  
   // utilizes arraybuffer
   describe('buffer', () => {
     it('serializeAs', () => {

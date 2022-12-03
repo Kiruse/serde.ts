@@ -35,6 +35,8 @@ export type StandardProtocolMap = {
   bigint: bigint,
   undef: undefined,
   null: null,
+  regex: RegExp,
+  regexp: RegExp,
   buffer: Buffer,
   arraybuffer: ArrayBuffer,
   typedarray: ArrayBufferView,
@@ -67,6 +69,9 @@ export class SerdeBase<M extends TypeMap = {}> {
         throw new Error('Expected [SERDE] property to be a string (protocol name)');
       return value[SERDE];
     }
+    
+    if (value instanceof RegExp)
+      return 'regex';
     
     if (globalThis.Buffer?.isBuffer(value))
       return 'buffer';
@@ -205,6 +210,14 @@ export class SerdeBase<M extends TypeMap = {}> {
         () => {},
         () => null,
       )
+      .set('regex',
+        serializeRegex,
+        deserializeRegex,
+      )
+      .set('regexp',
+        serializeRegex,
+        deserializeRegex,
+      )
       .set('buffer',
         ({ serde }, writer, value: Buffer) => {
           const bytes = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
@@ -317,6 +330,24 @@ export class DeserializeContext<M extends TypeMap = any> {
     this.refs.add(ref);
     return ref;
   }
+}
+
+function serializeRegex(ctx: SerializeContext, writer: Writer, value: RegExp) {
+  ctx.serde.serializeAs('string', value.toString(), writer, ctx);
+}
+
+function deserializeRegex(ctx: DeserializeContext, reader: Reader): RegExp {
+  let raw: string = ctx.serde.deserializeAs('string', reader, ctx);
+  let flags: string = '';
+  if (raw[0] === '/') raw = raw.substring(1);
+  
+  const idx = raw.lastIndexOf('/');
+  if (idx !== -1) {
+    flags = raw.substring(idx+1);
+    raw = raw.substring(0, idx);
+  }
+  
+  return new RegExp(raw, flags);
 }
 
 /** Code shared between generic arrays & generic objects */
