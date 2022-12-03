@@ -8,11 +8,6 @@ const textDecoder = new TextDecoder();
 const encode = textEncoder.encode.bind(textEncoder);
 const decode = textDecoder.decode.bind(textDecoder);
 
-type JoinTypeMap<T extends SerdeBase, M2 extends TypeMap> =
-  T extends SerdeBase<infer M1>
-  ? SerdeBase<M1 & M2>
-  : never;
-
 const TYPEDARRAYS = [
   null,
   Int8Array,
