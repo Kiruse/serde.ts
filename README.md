@@ -11,86 +11,93 @@ When TypeScript's decorators feature matures, serde will use these to deliver an
 
 ***IMPORTANT:** This library is an early WIP. API may and will change as it matures.*
 
-## Table of Contents
-- [serde.ts](#serdets)
-  - [Table of Contents](#table-of-contents)
-  - [Usage](#usage)
-  - [Simple SerDe](#simple-serde)
-  - [Circular Reference Resolution](#circular-reference-resolution)
-  - [Caveats](#caveats)
+## Quickstart
+If your project has simple needs for serialization & deserialization, e.g. cross-session persistence, *serde* can get you started quickly.
+If your data type has no specific needs and consists only of [standard types](https://kiruse.gitbook.io/serde.ts/standard-types), *serde* works out of the box:
 
-## Usage
-*serde* default-exports the `SerdeProtocol`, which acts like a micro-cosmos of de/serialization subprotocols. Typically, a single such instance will suffice, but it is possible to override the default behavior and fully customize the entire pipeline - though at some point one loses all benefit of using this library altogether.
-
-**Example**
 ```typescript
-import SerdeProtocol, { SERDE } from '@kiruse/serde'
-import { expect } from 'chai'
+import SerdeProtocol from '@kiruse/serde';
+import { expect } from 'chai';
+
+const serde = SerdeProtocol.standard();
+
+const ref = {
+    foo: 'foo',
+    bar: 42,
+    baz: 69,
+};
+const bytes = serde.serialize(ref);
+expect(serde.deserialize(bytes)).to.deep.equal(ref);
+```
+
+If your object has more specific needs, such as class methods or computed properties, you may/should use the `.derive` method:
+
+```typescript
+import SerdeProtocol, { SERDE } from '@kiruse/serde';
+import { expect } from 'chai';
 
 class MyType {
-  [SERDE] = 'my-type';
-  
-  constructor(
-    public someNumber = 42,
-    public someString = 'foobar',
-  ) {}
+    [SERDE] = 'my-type';
+    
+    constructor(
+        public readonly foo: number,
+        public readonly bar: string,
+        private deserialized = false,
+    ) {}
+    
+    get isDeserialized() { return this.deserialized }
 }
 
 const serde = SerdeProtocol.standard()
-  .sub('my-type',
-    (ctx, writer, value: MyType) => {
-      writer.writeNumber(value.someNumber);
-      writer.writeString(value.someString);
-    },
-    (ctx, reader) => {
-      return {
-        [SERDE]: 'my-type',
-        someNumber: reader.readNumber(),
-        someString: reader.readString(),
-      }
-    },
-  );
+    .derive(
+        'my-type',
+        (myType: MyType) => ({ foo: myType.foo, bar: myType.bar }),
+        (data) => new MyType(data.foo, data.bar, true);
+    );
 
-const myType1 = new MyType();
-const myType2 = new MyType(69, 'barfoo');
-
-const serialized1 = serde.serialize(myType1);
-const serialized2 = serde.serializeAs(myType2);
-
-expect(serde.deserialize(serialized1)).to.deep.equal(myType1);
-expect(serde.deserializeAs(serialized2)).to.deep.equal(myType2);
+const ref = new MyType(42, 'baz');
+const bytes = serde.serialize(ref);
+expect(serde.deserialize(bytes)).to.deep.equal(ref);
 ```
 
-There is a difference between `serialize` and `serializeAs`, as well as their deserialization counterparts: `serialize` and `deserialize` resort to `any` and `unknown` respectively, whereas `serializeAs` and `deserializeAs` are fully typed. The type information is extracted from the call to `sub` (and assumes serializer & deserializer use the same type as input/output), and associated with the protocol name (in the above example `my-type`). In other words, `serialized1 is unknown`, whereas `serialized2 is MyType`.
-
-Calling `SerdeProtocol.standard()` creates a new `SerdeProtocol` with default implementations for various built-in types, such as Buffers, ArrayBuffers, and TypedArrays. One may pass a derived `SerdeProtocol` to populate *it* with the standard implementations instead, e.g. `SerdeProtocol.standard(new MySerdeProtocol())`. This is to allow customizing the `SerdeProtocol.getSubProtocolOf()` member method, which integrates built-in types with *serde* through specific rules.
-
-## Simple SerDe
-If your needs for de/serialization are not very specific, you may simply create a derived standard object protocol:
+For more complex needs, you may also use the `.sub` method:
 
 ```typescript
-import { SerdeProtocol, SERDE } from '@kiruse/serde'
+import SerdeProtocol, { SERDE } from '@kiruse/serde';
+import { expect } from 'chai';
 
 class MyType {
-  [SERDE] = 'my-type';
-  
-  constructor(
-    public someNumber = 42,
-    public someString = 'foobar',
-  ) {}
+    [SERDE] = 'my-type';
+    
+    constructor(
+        public readonly foo: string,
+        public readonly bar: number,
+    ) {}
 }
 
 const serde = SerdeProtocol.standard()
-  .derive('my-type',
-    (val: MyType) => ({ num: val.someNumber, str: val.someString }),
-    data => new MyType(data.num, data.str),
-  )
+    .sub('my-type',
+        (ctx, writer, myType: MyType) => {
+            ctx.serde.serializeAs('string', myType.foo, writer, ctx);
+            ctx.serde.serializeAs('number', myType.bar, writer, ctx);
+        },
+        (ctx, reader): MyType => {
+            const foo = ctx.serde.deserializeAs('string', reader, ctx);
+            const bar = ctx.serde.deserializeAs('number', reader, ctx);
+            return new MyType(foo, bar);
+        },
+    );
+
+const myType = new MyType('baz', 42);
+const bytes = serde.serializeAs('my-type', myType).compress().buffer;
+expect(serde.deserializeAs('my-type', bytes)).to.deep.equal(myType);
 ```
 
-The `derive` method takes a `filter` and a `rebuild` callback. `filter` is expected to derive a simplified, data-only version of the input object, which can be fed back to `rebuild` to reconstruct a valid instance of the underlying type. The generated subprotocol relies on the `object` subprotocol to de/serialize this data-only object.
+Note that there is some peculiarity to `SerdeProtocol`'s `.sub` and `.derive` methods: while they alter the object's internal data directly, the returned data type differs from the original. Thus, in order to retain proper type information, you must either reassign `serde`, or chain these methods. More on this at [`.sub` & `.derive` methods](https://kiruse.gitbook.io/serde.ts/internals/type-map#.sub-and-.derive-methods).
 
-## Circular Reference Resolution
-In order to resolve circular references, the `standard` protocol serializes nested objects by reference, and each reference is stored sequentially in the underlying binary buffer. However, *serde* is not magic, and I want to leave enough room for full control, so `standard` only considers objects stored in the `ctx.refs` property of the first argument `ctx` passed to the serializer callbacks. Then, when calling `SerdeProtocol.serialize`, any value serialized with `object` is serialized as `reference` instead - save for the root object itself. This requires that the `ctx` argument be passed down to `serialize`. Note that this does not apply when calling `serializeAs` directly.
+Alternatively, the library also offers the `SerdeBase` class which underlies the `SerdeProtocol` but relies on a different usage.
+
+Find the full documentation [here](https://kiruse.gitbook.io/serde.ts/).
 
 ## Caveats
 It is impossible to de/serialize neither symbols nor functions:
