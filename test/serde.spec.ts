@@ -191,6 +191,30 @@ describe('standard serde', () => {
       expect(standard.deserialize(bytes)).to.deep.equal(ref);
     });
     
+    it('references', () => {
+      const ref2 = {
+        foo: 'foo',
+        bar: 'bar',
+      };
+      const ref1 = {
+        foo: ref2,
+        bar: { baz: ref2 },
+      };
+      const bytes = standard.serialize(ref1);
+      const val = standard.deserialize(bytes) as any;
+      expect(val).to.deep.equal(ref1);
+      expect(val.foo).to.equal(val.bar.baz);
+    });
+    
+    it('cyclic', () => {
+      const ref1: any = {};
+      const ref2 = { ref: ref1 };
+      ref1.ref = ref2;
+      const bytes = standard.serialize(ref1);
+      const val = standard.deserialize(bytes) as any;
+      expect(val.ref.ref).to.equal(val);
+    });
+    
     it.skip('subserde', () => {
       throw new Error('not yet implemented');
     });
