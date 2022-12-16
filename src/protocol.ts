@@ -272,7 +272,7 @@ export default class SerdeProtocol<S extends TypeMap = {}> extends SerdeBase<S> 
     serialize: Serializer<T>,
     deserialize: Deserializer<T>,
     force = false,
-  ): SerdeProtocol<S & { [subprotocol in P]: SubProtocol<T> }> {
+  ): SerdeProtocol<S & { [subprotocol in P]: T }> {
     // cheat mode engaged!
     //@ts-ignore
     this.set(subprotocol, serialize, deserialize, force);
@@ -284,7 +284,7 @@ export default class SerdeProtocol<S extends TypeMap = {}> extends SerdeBase<S> 
     filter: (value: T) => D,
     rebuild: (data: D) => T,
     force = false,
-  ): SerdeProtocol<S & { [p in P]: SubProtocol<T> }> {
+  ): SerdeProtocol<S & { [p in P]: T }> {
     //@ts-ignore
     return this.setSimple(subprotocol, filter, rebuild, force);
   }
