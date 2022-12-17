@@ -35,32 +35,7 @@ export type Deserializer<T> = (ctx: DeserializeContext, reader: Reader) => T;
  */
 export class Reference {
   [SERDE] = 'reference';
-  
   constructor(public readonly id: number) {}
-  
-  makeDereference(substitute: DeReference['substitute']): DeReference {
-    return {
-      id: this.id,
-      substitute,
-    };
-  }
-}
-
-/** A symbolic reference to a cyclical object reference. Substitution
- * with the actual object is deferred at least until the actual object
- * has been fully reconstructed.
- */
-export interface DeReference {
-  /** The ID of this reference. Must be unique enough to enable
-   * reconstruction during deserialization, i.e. across runtime
-   * sessions.
-   */
-  id: number;
-  /** Callback which receives the actual object reference and is
-     * expected to substitute this symbolic reference with the actual
-     * object reference.
-     */
-  substitute(actual: any): void;
 }
 
 export type RefWrapper = {

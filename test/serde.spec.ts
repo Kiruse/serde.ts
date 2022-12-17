@@ -299,17 +299,18 @@ describe('standard serde', () => {
       const serde = SerdeProtocol.standard()
         .derive('test::foo',
           (value: Foo, data) => ({ data: data(value.data), ref: value.ref }),
-          ({ data: { foo, bar }, ref }) => {
+          ({ data: { foo, bar }, ref }, deref) => {
             const inst = new Foo({ foo, bar }, {});
-            ref.makeDereference(ref => {
+            deref(ref, ref => {
               inst.ref = ref;
             });
             return inst;
           },
         );
-      const ref = { foo: new Foo({ foo: 'foo', bar: 42 }, {}) };
+      const ref = { foo: new Foo({ foo: 'foo', bar: 42 }, { baz: 69.69 }) };
       const bytes = serde.serialize(ref);
       expect(serde.deserialize(bytes)).to.deep.equal(ref);
+      console.log(ref);
     });
   });
 });

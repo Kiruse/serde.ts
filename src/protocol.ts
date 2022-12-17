@@ -1,5 +1,5 @@
 import Reader from './reader'
-import { DataObject, DeReference, DeserializedData, Deserializer, Reference, RefWrapper, SERDE, Serializer, SubProtocol, TypeMap } from './types'
+import { DataObject, DeserializedData, Deserializer, Reference, RefWrapper, SERDE, Serializer, SubProtocol, TypeMap } from './types'
 import { Buffer, hash, isArrayLike } from './util'
 import Writer from './writer'
 
@@ -39,6 +39,11 @@ export type StandardProtocolMap = {
   object: object,
   'data-object': DataObject<unknown>,
   reference: Reference,
+}
+
+type DeReference = {
+  id: number;
+  substitute(actual: any): void;
 }
 
 export class SerdeBase<M extends TypeMap = {}> {
@@ -153,7 +158,7 @@ export class SerdeBase<M extends TypeMap = {}> {
   setSimple<P extends string & keyof M, D>(
     subprotocol: P,
     filter: (value: M[P], data: <T>(value: T) => DataObject<T>) => D,
-    rebuild: (data: DeserializedData<D>) => M[P],
+    rebuild: (data: DeserializedData<D>, deref: DeserializeContext['deref']) => M[P],
     force = false,
   ) {
     return this.set(subprotocol,
@@ -163,7 +168,7 @@ export class SerdeBase<M extends TypeMap = {}> {
         if (data && typeof data === 'object' && !data[SERDE]) data[SERDE] = 'data-object';
         ctx.serde.serialize(filter(value, datafn), writer, ctx);
       },
-      (ctx, reader) => rebuild(ctx.serde.deserialize(reader, ctx) as any),
+      (ctx, reader) => rebuild(ctx.serde.deserialize(reader, ctx) as any, ctx.deref),
       force,
     );
   }
@@ -287,7 +292,7 @@ export default class SerdeProtocol<S extends TypeMap = {}> extends SerdeBase<S> 
   derive<P extends string, T, D>(
     subprotocol: P,
     filter: (value: T, data: <T>(value: T) => DataObject<T>) => D,
-    rebuild: (data: DeserializedData<D>) => T,
+    rebuild: (data: DeserializedData<D>, deref: DeserializeContext['deref']) => T,
     force = false,
   ): SerdeProtocol<S & { [p in P]: T }> {
     //@ts-ignore
@@ -326,8 +331,11 @@ export class DeserializeContext<M extends TypeMap = any> {
     public refs = new Set<DeReference>(),
   ) {}
   
-  deref(ref: DeReference) {
-    this.refs.add(ref);
+  deref = (ref: Reference, substitute: DeReference['substitute']) => {
+    this.refs.add({
+      id: ref.id,
+      substitute,
+    });
     return ref;
   }
 }
@@ -416,9 +424,9 @@ function deserializeObject(
     
     for (const [key, value] of Object.entries(result)) {
       if (value instanceof Reference) {
-        ctx.deref(value.makeDereference(obj => {
+        ctx.deref(value, obj => {
           result[key] = obj;
-        }));
+        });
       }
     }
     
