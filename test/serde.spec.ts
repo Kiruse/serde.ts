@@ -310,7 +310,6 @@ describe('standard serde', () => {
       const ref = { foo: new Foo({ foo: 'foo', bar: 42 }, {}) };
       const bytes = serde.serialize(ref);
       expect(serde.deserialize(bytes)).to.deep.equal(ref);
-      console.log(ref);
     });
   });
 });
