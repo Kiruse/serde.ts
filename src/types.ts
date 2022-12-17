@@ -14,6 +14,16 @@ export interface SubProtocol<T = unknown> {
   deserialize: Deserializer<T>;
 };
 
+export type DataObject<T> = { [SERDE]: 'data-object' } & T;
+export type DeserializedData<T> = {
+  [k in keyof T & (string | number) as T[k] extends (symbol | Function) ? never : k]:
+    T[k] extends DataObject<{}>
+    ? DeserializedData<T[k]>
+    : T[k] extends object
+    ? Reference
+    : T[k];
+}
+
 /** A Serializer writes `value` to `writer` in a format which allows its corresponding `Deserializer` to restore it again. */
 export type Serializer<T> = (ctx: SerializeContext, writer: Writer, value: T) => void;
 /** A Deserializer reads a value from `reader` in a format determined by its corresponding `Serializer`. */

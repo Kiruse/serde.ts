@@ -1,5 +1,5 @@
 import Reader from './reader'
-import { DeReference, Deserializer, Reference, SERDE, Serializer, SubProtocol, TypeMap } from './types'
+import { DataObject, DeReference, DeserializedData, Deserializer, Reference, SERDE, Serializer, SubProtocol, TypeMap } from './types'
 import { Buffer, hash, isArrayLike } from './util'
 import Writer from './writer'
 
@@ -37,6 +37,7 @@ export type StandardProtocolMap = {
   typedarray: ArrayBufferView,
   array: any[],
   object: object,
+  'data-object': DataObject<unknown>,
   reference: Reference,
 }
 
@@ -151,13 +152,14 @@ export class SerdeBase<M extends TypeMap = {}> {
   
   setSimple<P extends string & keyof M, D>(
     subprotocol: P,
-    filter: (value: M[P]) => D,
-    rebuild: (data: D) => M[P],
+    filter: (value: M[P], data: <T>(value: T) => DataObject<T>) => D,
+    rebuild: (data: DeserializedData<D>) => M[P],
     force = false,
   ) {
     return this.set(subprotocol,
       (ctx, writer, value) => {
-        ctx.serde.serialize(filter(value), writer, ctx);
+        const datafn = <T>(value: T) => ({ [SERDE]: 'data-object' as const, ...value });
+        ctx.serde.serialize(filter(value, datafn), writer, ctx);
       },
       (ctx, reader) => rebuild(ctx.serde.deserialize(reader, ctx) as any),
       force,
@@ -248,6 +250,49 @@ export class SerdeBase<M extends TypeMap = {}> {
       )
       .set('array', serializeObject, deserializeObject)
       .set('object', serializeObject, deserializeObject)
+      .set('data-object',
+        // DataObjects are objects which don't implicitly collect references to nested objects under the assumption
+        // that all data it contains is trivial and can be easily serialized. This is useful for derived subprotocols
+        // which store data in nested objects to organize data more conveniently, but then access this data during rebuild.
+        (ctx, writer, obj) => {
+          if (isArrayLike(obj)) {
+            writer.writeBool(true);
+            writer.writeUInt32(obj.length);
+            for (const item of obj) {
+              ctx.serde.serialize(item, writer, ctx);
+            }
+          }
+          else {
+            const entries = Object.entries(obj);
+            writer.writeBool(false);
+            writer.writeUInt32(entries.length);
+            for (const [key, value] of entries) {
+              ctx.serde.serializeAs('string', key, writer);
+              ctx.serde.serialize(value, writer, ctx);
+            }
+          }
+        },
+        (ctx, reader) => {
+          const isArray = reader.readBool();
+          const count = reader.readUInt32();
+          if (isArray) {
+            const result: any[] = [];
+            for (let i = 0; i < count; ++i) {
+              result.push(ctx.serde.deserialize(reader, ctx));
+            }
+            return result;
+          }
+          else {
+            const result: any = {};
+            for (let i = 0; i < count; ++i) {
+              const key = ctx.serde.deserializeAs('string', reader, ctx);
+              const value = ctx.serde.deserialize(reader, ctx);
+              result[key] = value;
+            }
+            return result;
+          }
+        },
+      )
       .set('reference',
         (_, writer, ref: Reference) => {
           writer.writeUInt32(ref.id);
@@ -281,8 +326,8 @@ export default class SerdeProtocol<S extends TypeMap = {}> extends SerdeBase<S> 
   
   derive<P extends string, T, D>(
     subprotocol: P,
-    filter: (value: T) => D,
-    rebuild: (data: D) => T,
+    filter: (value: T, data: <T>(value: T) => DataObject<T>) => D,
+    rebuild: (data: DeserializedData<D>) => T,
     force = false,
   ): SerdeProtocol<S & { [p in P]: T }> {
     //@ts-ignore
@@ -301,17 +346,17 @@ export class SerializeContext<M extends TypeMap = any> {
     public nextId = 0,
   ) {}
   
-  ref(obj: object): Reference;
-  ref<T>(obj: T): T;
-  ref(obj: any) {
+  // prop method signature overload style
+  // so we can pass the method along by itself w/ implied `this`
+  ref: { (obj: object): Reference; <T>(value: T): T; } = (value: any) => {
     // pass back thru for convenience
-    if (!obj || typeof obj !== 'object')
-      return obj;
+    if (!value || typeof value !== 'object')
+      return value;
     
-    if (!this.refs.has(obj)) {
-      this.refs.set(obj, new Reference(this.nextId++));
+    if (!this.refs.has(value)) {
+      this.refs.set(value, new Reference(this.nextId++));
     }
-    return this.refs.get(obj)!;
+    return this.refs.get(value)!;
   }
 }
 

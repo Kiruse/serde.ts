@@ -288,5 +288,22 @@ describe('standard serde', () => {
       const bytes = serde.serialize(ref);
       expect(serde.deserialize(bytes)).to.deep.equal(ref);
     });
+    
+    it('data object', () => {
+      class Foo {
+        [SERDE] = 'test::foo';
+        
+        constructor(public data: {foo: string, bar: number}) {}
+      }
+      
+      const serde = SerdeProtocol.standard()
+        .derive('test::foo',
+          (value: Foo, data) => ({ data: data(value.data) }),
+          (data) => new Foo(data.data),
+        );
+      const ref = new Foo({ foo: 'foo', bar: 42 });
+      const bytes = serde.serialize(ref);
+      expect(serde.deserialize(bytes)).to.deep.equal(ref);
+    });
   });
 });
