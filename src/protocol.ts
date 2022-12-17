@@ -1,5 +1,5 @@
 import Reader from './reader'
-import { DataObject, DeReference, DeserializedData, Deserializer, Reference, SERDE, Serializer, SubProtocol, TypeMap } from './types'
+import { DataObject, DeReference, DeserializedData, Deserializer, Reference, RefWrapper, SERDE, Serializer, SubProtocol, TypeMap } from './types'
 import { Buffer, hash, isArrayLike } from './util'
 import Writer from './writer'
 
@@ -159,6 +159,8 @@ export class SerdeBase<M extends TypeMap = {}> {
     return this.set(subprotocol,
       (ctx, writer, value) => {
         const datafn = <T>(value: T) => ({ [SERDE]: 'data-object' as const, ...value });
+        const data = filter(value, datafn) as any;
+        if (data && typeof data === 'object' && !data[SERDE]) data[SERDE] = 'data-object';
         ctx.serde.serialize(filter(value, datafn), writer, ctx);
       },
       (ctx, reader) => rebuild(ctx.serde.deserialize(reader, ctx) as any),
@@ -250,49 +252,7 @@ export class SerdeBase<M extends TypeMap = {}> {
       )
       .set('array', serializeObject, deserializeObject)
       .set('object', serializeObject, deserializeObject)
-      .set('data-object',
-        // DataObjects are objects which don't implicitly collect references to nested objects under the assumption
-        // that all data it contains is trivial and can be easily serialized. This is useful for derived subprotocols
-        // which store data in nested objects to organize data more conveniently, but then access this data during rebuild.
-        (ctx, writer, obj) => {
-          if (isArrayLike(obj)) {
-            writer.writeBool(true);
-            writer.writeUInt32(obj.length);
-            for (const item of obj) {
-              ctx.serde.serialize(item, writer, ctx);
-            }
-          }
-          else {
-            const entries = Object.entries(obj);
-            writer.writeBool(false);
-            writer.writeUInt32(entries.length);
-            for (const [key, value] of entries) {
-              ctx.serde.serializeAs('string', key, writer);
-              ctx.serde.serialize(value, writer, ctx);
-            }
-          }
-        },
-        (ctx, reader) => {
-          const isArray = reader.readBool();
-          const count = reader.readUInt32();
-          if (isArray) {
-            const result: any[] = [];
-            for (let i = 0; i < count; ++i) {
-              result.push(ctx.serde.deserialize(reader, ctx));
-            }
-            return result;
-          }
-          else {
-            const result: any = {};
-            for (let i = 0; i < count; ++i) {
-              const key = ctx.serde.deserializeAs('string', reader, ctx);
-              const value = ctx.serde.deserialize(reader, ctx);
-              result[key] = value;
-            }
-            return result;
-          }
-        },
-      )
+      .set('data-object', serializeObject, deserializeObject)
       .set('reference',
         (_, writer, ref: Reference) => {
           writer.writeUInt32(ref.id);
@@ -348,9 +308,9 @@ export class SerializeContext<M extends TypeMap = any> {
   
   // prop method signature overload style
   // so we can pass the method along by itself w/ implied `this`
-  ref: { (obj: object): Reference; <T>(value: T): T; } = (value: any) => {
+  ref: RefWrapper = (value: any) => {
     // pass back thru for convenience
-    if (!value || typeof value !== 'object')
+    if (!value || typeof value !== 'object' || value[SERDE] === 'data-object')
       return value;
     
     if (!this.refs.has(value)) {

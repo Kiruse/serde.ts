@@ -293,17 +293,24 @@ describe('standard serde', () => {
       class Foo {
         [SERDE] = 'test::foo';
         
-        constructor(public data: {foo: string, bar: number}) {}
+        constructor(public data: {foo: string, bar: number}, public ref: object) {}
       }
       
       const serde = SerdeProtocol.standard()
         .derive('test::foo',
-          (value: Foo, data) => ({ data: data(value.data) }),
-          (data) => new Foo(data.data),
+          (value: Foo, data) => ({ data: data(value.data), ref: value.ref }),
+          ({ data: { foo, bar }, ref }) => {
+            const inst = new Foo({ foo, bar }, {});
+            ref.makeDereference(ref => {
+              inst.ref = ref;
+            });
+            return inst;
+          },
         );
-      const ref = new Foo({ foo: 'foo', bar: 42 });
+      const ref = { foo: new Foo({ foo: 'foo', bar: 42 }, {}) };
       const bytes = serde.serialize(ref);
       expect(serde.deserialize(bytes)).to.deep.equal(ref);
+      console.log(ref);
     });
   });
 });
