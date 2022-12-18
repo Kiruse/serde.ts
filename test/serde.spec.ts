@@ -1,7 +1,7 @@
 import { expect } from 'chai'
 import SerdeProtocol from '../src/protocol'
 import Reader from '../src/reader';
-import { SERDE } from '../src/types';
+import { Reference, SERDE } from '../src/types';
 
 const standard = SerdeProtocol.standard();
 
@@ -311,5 +311,28 @@ describe('standard serde', () => {
       const bytes = serde.serialize(ref);
       expect(serde.deserialize(bytes)).to.deep.equal(ref);
     });
+    
+    it('root data array', () => {
+      class Foo {
+        [SERDE] = 'test:root-data-array';
+        constructor(public data: any[]) {}
+      }
+      
+      const serde = SerdeProtocol.standard()
+        .derive('test:root-data-array',
+          ({ data }: Foo) => data,
+          (data, deref): Foo => {
+            const foo = new Foo(new Array(data.length));
+            Reference.all(deref, data, values => {
+              foo.data = values;
+            });
+            return foo;
+          }
+        )
+      
+      const ref = new Foo([1, {2: 3}, [4]]);
+      const bytes = serde.serialize(ref);
+      expect(serde.deserialize(bytes)).to.deep.equal(ref);
+    })
   });
 });

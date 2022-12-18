@@ -166,7 +166,7 @@ export class SerdeBase<M extends TypeMap = {}> {
         const datafn: DataWrapper = (value) => {(value as any)[SERDE] = 'data-object'; return value as any};
         const data = filter(value, datafn) as any;
         if (data && typeof data === 'object' && !data[SERDE]) data[SERDE] = 'data-object';
-        ctx.serde.serialize(filter(value, datafn), writer, ctx);
+        ctx.serde.serialize(data, writer, ctx);
       },
       (ctx, reader) => rebuild(ctx.serde.deserialize(reader, ctx) as any, ctx.deref),
       force,
@@ -313,9 +313,9 @@ export class SerializeContext<M extends TypeMap = any> {
   
   // prop method signature overload style
   // so we can pass the method along by itself w/ implied `this`
-  ref: RefWrapper = (value: any) => {
+  ref: RefWrapper = (value: any, force = false) => {
     // pass back thru for convenience
-    if (!value || typeof value !== 'object' || value[SERDE] === 'data-object')
+    if (!value || typeof value !== 'object' || (!force && value[SERDE] === 'data-object'))
       return value;
     
     if (!this.refs.has(value)) {
@@ -367,7 +367,8 @@ function serializeObject(
   const { serde, refs } = ctx;
   const isRoot = refs.size === 0;
   if (!value) throw new Error('Invalid object null or undefined');
-  ctx.ref(value as object);
+  //@ts-ignore
+  ctx.ref(value as object, isRoot);
   
   writer.writeFlags(isRoot, isArrayLike(value));
   
