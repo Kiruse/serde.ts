@@ -1,5 +1,5 @@
 import Reader from './reader'
-import { DataObject, DeserializedData, Deserializer, Reference, RefWrapper, SERDE, Serializer, SubProtocol, TypeMap } from './types'
+import { DataObject, DataWrapper, DeserializedData, Deserializer, Reference, RefWrapper, SERDE, Serializer, SubProtocol, TypeMap } from './types'
 import { Buffer, hash, isArrayLike } from './util'
 import Writer from './writer'
 
@@ -108,7 +108,7 @@ export class SerdeBase<M extends TypeMap = {}> {
     subprotocol: P,
     value: M[P],
     writer = new Writer(),
-    ctx = new SerializeContext(this),
+    ctx: SerializeContext<M> = new SerializeContext(this),
   ) {
     if (!(subprotocol in this.subprotocols))
       throw new Error(`No such subprotocol: ${subprotocol}`);
@@ -157,13 +157,13 @@ export class SerdeBase<M extends TypeMap = {}> {
   
   setSimple<P extends string & keyof M, D>(
     subprotocol: P,
-    filter: (value: M[P], data: <T>(value: T) => DataObject<T>) => D,
+    filter: (value: M[P], data: DataWrapper) => D,
     rebuild: (data: DeserializedData<D>, deref: DeserializeContext['deref']) => M[P],
     force = false,
   ) {
     return this.set(subprotocol,
       (ctx, writer, value) => {
-        const datafn = <T>(value: T) => ({ [SERDE]: 'data-object' as const, ...value });
+        const datafn: DataWrapper = (value) => {(value as any)[SERDE] = 'data-object'; return value as any};
         const data = filter(value, datafn) as any;
         if (data && typeof data === 'object' && !data[SERDE]) data[SERDE] = 'data-object';
         ctx.serde.serialize(filter(value, datafn), writer, ctx);
@@ -291,7 +291,7 @@ export default class SerdeProtocol<S extends TypeMap = {}> extends SerdeBase<S> 
   
   derive<P extends string, T, D>(
     subprotocol: P,
-    filter: (value: T, data: <T>(value: T) => DataObject<T>) => D,
+    filter: (value: T, data: DataWrapper) => D,
     rebuild: (data: DeserializedData<D>, deref: DeserializeContext['deref']) => T,
     force = false,
   ): SerdeProtocol<S & { [p in P]: T }> {

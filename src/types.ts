@@ -15,14 +15,17 @@ export interface SubProtocol<T = unknown> {
 };
 
 export type DataObject<T> = { [SERDE]: 'data-object' } & T;
-export type DeserializedData<T> = DataObject<{
-  [k in keyof T & (string | number) as T[k] extends (symbol | Function) ? never : k]:
-    T[k] extends DataObject<{}>
-    ? DeserializedData<T[k]>
-    : T[k] extends object
-    ? Reference
-    : T[k];
-}>;
+export type DeserializedData<T> =
+  T extends (infer E)[]
+  ? DeserializedData<E>[]
+  : {
+    [k in keyof T & (string | number) as T[k] extends (symbol | Function) ? never : k]:
+      T[k] extends DataObject<{}>
+      ? DeserializedData<T[k]>
+      : T[k] extends object
+      ? Reference
+      : T[k];
+  };
 
 /** A Serializer writes `value` to `writer` in a format which allows its corresponding `Deserializer` to restore it again. */
 export type Serializer<T> = (ctx: SerializeContext, writer: Writer, value: T) => void;
@@ -37,6 +40,9 @@ export class Reference {
   [SERDE] = 'reference';
   constructor(public readonly id: number) {}
 }
+
+/** Callback type which injects the `[SERDE]: 'data-object'` property into the given object. */
+export type DataWrapper = <T extends object>(value: T) => DataObject<T>;
 
 export type RefWrapper = {
   <T extends DataObject<{}>>(data: T): T;
