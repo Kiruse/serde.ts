@@ -21,5 +21,5 @@ export function patchSubserde<T>(obj: T, subProtocol: string) {
 
 export const hash = (value: any) => parseInt(hashsum(value), 16);
 
-export const isArrayLike = (value: any): value is unknown[] => 'length' in value && 0 in value && value.length-1 in value;
-export const isObject = (value: any): value is object => typeof value === 'object';
+export const isArrayLike = (value: any): value is unknown[] => typeof value.length === 'number';
+export const isObject = (value: any): value is object => value && typeof value === 'object';
