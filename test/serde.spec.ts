@@ -162,6 +162,12 @@ describe('standard serde', () => {
       expect(standard.deserialize(bytes)).to.deep.equal(ref);
     });
     
+    it('empty', () => {
+      const ref = [];
+      const bytes = standard.serialize(ref);
+      expect(standard.deserialize(bytes)).to.deep.equal(ref);
+    });
+    
     it.skip('subserde', () => {
       throw new Error('not yet implemented')
     });
@@ -333,6 +339,6 @@ describe('standard serde', () => {
       const ref = new Foo([1, {2: 3}, [4]]);
       const bytes = serde.serialize(ref);
       expect(serde.deserialize(bytes)).to.deep.equal(ref);
-    })
+    });
   });
 });
