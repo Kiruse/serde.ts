@@ -332,11 +332,15 @@ export class DeserializeContext<M extends TypeMap = any> {
   ) {}
   
   deref = (ref: Reference, substitute: DeReference['substitute']) => {
-    this.refs.add({
-      id: ref.id,
-      substitute,
-    });
-    return ref;
+    if (ref instanceof Reference) {
+      this.refs.add({
+        id: ref.id,
+        substitute,
+      });
+    }
+    else {
+      substitute(ref);
+    }
   }
 }
 
