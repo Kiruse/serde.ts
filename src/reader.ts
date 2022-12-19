@@ -61,4 +61,7 @@ export default class Reader {
     this.cursor += count;
     return cursor;
   }
+  
+  tell() { return this.cursor }
+  seek(pos: number) { this.cursor = pos; return this }
 }
