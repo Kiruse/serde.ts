@@ -246,6 +246,7 @@ Serde.prototype.standard = function() {
 }
 
 module.exports = Serde;
+Serde.Mapped = () => Serde;
 Serde.SerdeBase = Serde;
 Serde.SerdeAlter = Serde;
 

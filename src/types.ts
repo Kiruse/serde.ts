@@ -16,16 +16,18 @@ export interface SubProtocol<T = unknown> {
 
 export type DataObject<T> = { [SERDE]: 'data-object' } & T;
 export type DeserializedData<T> =
-  T extends (infer E)[]
-  ? DeserializedData<E>[]
-  : {
-    [k in keyof T & (string | number) as T[k] extends (symbol | Function) ? never : k]:
-      T[k] extends DataObject<{}>
-      ? DeserializedData<T[k]>
-      : T[k] extends object
-      ? Reference
-      : T[k];
-  };
+  T extends object
+  ? T extends (infer E)[]
+    ? DeserializedData<E>[]
+    : {
+      [k in keyof T & (string | number) as T[k] extends (symbol | Function) ? never : k]:
+        T[k] extends DataObject<{}>
+        ? DeserializedData<T[k]>
+        : T[k] extends object
+        ? Reference
+        : T[k];
+    }
+  : T;
 
 /** A Serializer writes `value` to `writer` in a format which allows its corresponding `Deserializer` to restore it again. */
 export type Serializer<T, M extends TypeMap = any, Ctx = {}> = (ctx: SerializeContext<M, Ctx>, writer: Writer, value: T) => void;
