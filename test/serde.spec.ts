@@ -240,6 +240,35 @@ describe('standard serde', () => {
   });
   
   describe('custom', () => {
+    it('simple', () => {
+      class Foo {
+        [SERDE] = 'test::simple';
+        constructor(public data: any) {}
+      }
+      
+      const serde = SerdeAlter().standard()
+        .setSimple('test::simple',
+          (value: Foo) => value.data,
+          (data): Foo => new Foo(data),
+        );
+      
+      {
+        const ref = new Foo([1, [2, 3], ['4']]);
+        const bytes = serde.serialize(ref);
+        const value = serde.deserialize(bytes);
+        expect(value).to.deep.equal(ref);
+        expect(Array.isArray(value.data)).to.be.true;
+      }
+      
+      {
+        const ref = new Foo({a: 'a', b: {c: 'd'}});
+        const bytes = serde.serialize(ref);
+        const value = serde.deserialize(bytes) as Foo;
+        expect(value.data.a).to.equal(ref.data.a)
+        expect(value.data.b.c).to.equal(ref.data.b.c);
+      }
+    });
+    
     it('data object', () => {
       class Foo {
         [SERDE] = 'test::foo';
