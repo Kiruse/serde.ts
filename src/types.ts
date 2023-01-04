@@ -1,4 +1,4 @@
-import type { DeserializeContext, SerializeContext } from './protocol'
+import type Serde from './protocol'
 import type Reader from './reader'
 import type Writer from './writer'
 
@@ -28,9 +28,49 @@ export type DeserializedData<T> =
   };
 
 /** A Serializer writes `value` to `writer` in a format which allows its corresponding `Deserializer` to restore it again. */
-export type Serializer<T> = (ctx: SerializeContext, writer: Writer, value: T) => void;
+export type Serializer<T, M extends TypeMap = any, Ctx = {}> = (ctx: SerializeContext<M, Ctx>, writer: Writer, value: T) => void;
 /** A Deserializer reads a value from `reader` in a format determined by its corresponding `Serializer`. */
-export type Deserializer<T> = (ctx: DeserializeContext, reader: Reader) => T;
+export type Deserializer<T, M extends TypeMap = any, Ctx = {}> = (ctx: DeserializeContext<M, Ctx>, reader: Reader) => T;
+
+export class SerializeContext<M extends TypeMap = any, Ctx = {}> {
+  constructor(
+    public serde: Serde<M, Ctx>,
+    public refs = new Map<object, Reference>(),
+    public nextId = 0,
+  ) {}
+  
+  // prop method signature overload style
+  // so we can pass the method along by itself w/ implied `this`
+  ref: RefWrapper = (value: any, force = false) => {
+    // pass back thru for convenience
+    if (!value || typeof value !== 'object' || (!force && value[SERDE] === 'data-object'))
+      return value;
+    
+    if (!this.refs.has(value)) {
+      this.refs.set(value, new Reference(this.nextId++));
+    }
+    return this.refs.get(value)!;
+  }
+}
+
+export class DeserializeContext<M extends TypeMap = any, Ctx = {}> {
+  constructor(
+    public serde: Serde<M, Ctx>,
+    public refs = new Set<DeReference>(),
+  ) {}
+  
+  deref = (ref: Reference, substitute: DeReference['substitute']) => {
+    if (ref instanceof Reference) {
+      this.refs.add({
+        id: ref.id,
+        substitute,
+      });
+    }
+    else {
+      substitute(ref);
+    }
+  }
+}
 
 /** A symbolic reference representing a cyclical object reference.
  * Stores additional data necessary to uniquely identify an object
@@ -64,6 +104,11 @@ export class Reference {
     // in which case above loop & its included check would never be called
     check() && callback(values);
   }
+}
+
+type DeReference = {
+  id: number;
+  substitute(actual: any): void;
 }
 
 /** Callback type which injects the `[SERDE]: 'data-object'` property into the given object. */

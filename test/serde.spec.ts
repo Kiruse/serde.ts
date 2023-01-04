@@ -1,9 +1,9 @@
 import { expect } from 'chai'
-import SerdeProtocol from '../src/protocol'
+import Serde, { SerdeAlter, StandardProtocolMap } from '../src/protocol'
 import Reader from '../src/reader';
 import { Reference, SERDE } from '../src/types';
 
-const standard = SerdeProtocol.standard();
+const standard = Serde().standard();
 
 describe('standard serde', () => {
   // Most fundamental primitive as it is used to identify protocol for deserialization
@@ -240,61 +240,6 @@ describe('standard serde', () => {
   });
   
   describe('custom', () => {
-    it('sub', () => {
-      type TestType = {
-        [SERDE]: 'test::sub';
-        foo: string;
-        bar: number;
-      }
-      
-      const serde = SerdeProtocol.standard()
-        .sub('test::sub',
-          ({ serde }, writer, value: TestType) => {
-            serde.serializeAs('string', value.foo, writer);
-            writer.writeNumber(value.bar);
-          },
-          ({ serde }, reader) => ({
-            [SERDE]: 'test::sub' as const,
-            foo: serde.deserializeAs('string', reader),
-            bar: reader.readNumber(),
-          }),
-        );
-      
-      const ref: TestType = {
-        [SERDE]: 'test::sub',
-        foo: 'foo',
-        bar: 42,
-      };
-      const bytes = serde.serialize(ref);
-      expect(serde.deserialize(bytes)).to.deep.equal(ref);
-    });
-    
-    it('derive', () => {
-      type TestType = {
-        [SERDE]: 'test::derive',
-        foo: string;
-        bar: number;
-      }
-      
-      const serde = SerdeProtocol.standard()
-        .derive('test::derive',
-          ({ foo, bar }: TestType) => ({ foo, bar }),
-          ({ foo, bar }) => ({
-            [SERDE]: 'test::derive' as const,
-            foo,
-            bar,
-          }),
-        );
-      
-      const ref: TestType = {
-        [SERDE]: 'test::derive',
-        foo: 'foo',
-        bar: 69.69,
-      };
-      const bytes = serde.serialize(ref);
-      expect(serde.deserialize(bytes)).to.deep.equal(ref);
-    });
-    
     it('data object', () => {
       class Foo {
         [SERDE] = 'test::foo';
@@ -302,8 +247,8 @@ describe('standard serde', () => {
         constructor(public data: {foo: string, bar: number}, public ref: object) {}
       }
       
-      const serde = SerdeProtocol.standard()
-        .derive('test::foo',
+      const serde = SerdeAlter().standard()
+        .setSimple('test::foo',
           (value: Foo, data) => ({ data: data(value.data), ref: value.ref }),
           ({ data: { foo, bar }, ref }, deref) => {
             const inst = new Foo({ foo, bar }, {});
@@ -318,14 +263,32 @@ describe('standard serde', () => {
       expect(serde.deserialize(bytes)).to.deep.equal(ref);
     });
     
+    it('data array', () => {
+      class Foo {
+        [SERDE] = 'test::foo';
+        constructor(public data: any[]) {}
+      }
+      
+      const serde = SerdeAlter().standard()
+        .setSimple('test::foo',
+          (value: Foo, data) => ({ data: data(value.data) }),
+          ({ data }) => new Foo(data),
+        );
+      const ref = { foo: new Foo([1, 2, '3', [4]]) };
+      const bytes = serde.serialize(ref);
+      const value = serde.deserialize(bytes);
+      expect(value).to.deep.equal(ref);
+      expect(Array.isArray(value.foo.data)).to.be.true;
+    });
+    
     it('root data array', () => {
       class Foo {
         [SERDE] = 'test:root-data-array';
         constructor(public data: any[]) {}
       }
       
-      const serde = SerdeProtocol.standard()
-        .derive('test:root-data-array',
+      const serde = SerdeAlter().standard()
+        .setSimple('test:root-data-array',
           ({ data }: Foo) => data,
           (data, deref): Foo => {
             const foo = new Foo(new Array(data.length));
@@ -339,6 +302,37 @@ describe('standard serde', () => {
       const ref = new Foo([1, {2: 3}, [4]]);
       const bytes = serde.serialize(ref);
       expect(serde.deserialize(bytes)).to.deep.equal(ref);
+    });
+    
+    it('context', () => {
+      class Foo {
+        [SERDE] = 'test::custom-context';
+        constructor(private registry: Record<number, string>, public id: number) {}
+        get = () => this.registry[this.id];
+      }
+      
+      const registry = {
+        1: 'foo',
+        2: 'bar',
+      };
+      
+      const serde = SerdeAlter(registry).standard()
+        .set('test::custom-context',
+          (_, writer, value: Foo) => {
+            writer.writeUInt32(value.id);
+          },
+          ({ serde: { ctx }}, reader): Foo => {
+            return new Foo(ctx, reader.readUInt32());
+          },
+        );
+      
+      const ref1 = new Foo(registry, 1);
+      let bytes = serde.serialize(ref1);
+      expect(serde.deserialize(bytes).get()).to.equal('foo');
+      
+      const ref2 = new Foo(registry, 2);
+      bytes = serde.serialize(ref2);
+      expect(serde.deserialize(bytes).get()).to.equal('bar');
     });
   });
 });
