@@ -22,7 +22,7 @@ export type StandardProtocolMap = {
 
 type MappedConstructor<Map extends TypeMap> = {
   (): Serde<Map>;
-  <Ctx>(ctx: Ctx): Serde<Map, Ctx>;
+  <Ctx>(ctx: Ctx | ((serde: Serde<Map, Ctx>) => Ctx)): Serde<Map, Ctx>;
 }
 
 type Serde<Map extends TypeMap, Ctx = {}> =
@@ -93,20 +93,20 @@ type SerdeAlter<Map extends TypeMap, Ctx = {}> = Omit<Serde<Map, Ctx>, 'set' | '
 
 interface SerdeConstructor {
   <M extends TypeMap = StandardProtocolMap>(): Serde<M>;
-  <M extends TypeMap, Ctx>(ctx: Ctx): Serde<M, Ctx>;
+  <M extends TypeMap, Ctx>(ctx: Ctx | ((serde: Serde<M, Ctx>) => Ctx)): Serde<M, Ctx>;
   new <M extends TypeMap>(): Serde<M>;
-  new <M extends TypeMap, Ctx>(ctx: Ctx): Serde<M, Ctx>;
+  new <M extends TypeMap, Ctx>(ctx: Ctx | ((serde: Serde<M, Ctx>) => Ctx)): Serde<M, Ctx>;
   
   Mapped<M extends TypeMap>(): MappedConstructor<M>;
 }
 
 interface SerdeAlterConstructor {
   <M extends TypeMap = StandardProtocolMap>(): SerdeAlter<M>;
-  <Ctx>(ctx: Ctx): SerdeAlter<StandardProtocolMap, Ctx>;
-  <M extends TypeMap, Ctx>(ctx: Ctx): SerdeAlter<M, Ctx>;
+  <Ctx>(ctx: Ctx | ((serde: SerdeAlter<any, Ctx>) => Ctx)): SerdeAlter<StandardProtocolMap, Ctx>;
+  <M extends TypeMap, Ctx>(ctx: Ctx | ((serde: SerdeAlter<any, Ctx>) => Ctx)): SerdeAlter<M, Ctx>;
   new <M extends TypeMap = StandardProtocolMap>(): SerdeAlter<M>;
-  new <Ctx>(ctx: Ctx): SerdeAlter<StandardProtocolMap, Ctx>;
-  new <M extends TypeMap, Ctx>(ctx: Ctx): SerdeAlter<M, Ctx>;
+  new <Ctx>(ctx: Ctx | ((serde: SerdeAlter<any, Ctx>) => Ctx)): SerdeAlter<StandardProtocolMap, Ctx>;
+  new <M extends TypeMap, Ctx>(ctx: Ctx | ((serde: SerdeAlter<any, Ctx>) => Ctx)): SerdeAlter<M, Ctx>;
 }
 
 declare const Serde: SerdeConstructor;

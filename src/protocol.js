@@ -26,7 +26,7 @@ const decode = decoder.decode.bind(decoder);
 function Serde(ctx) {
   if (!(this instanceof Serde)) return new Serde(...arguments);
   
-  this.ctx = ctx;
+  this.ctx = typeof ctx === 'function' ? ctx(this) : ctx;
   this.subprotocols = {};
   this.hashes = new Map();
 }
