@@ -62,6 +62,10 @@ Serde.prototype.getSubProtocolOf = function(value) {
     return 'arraybuffer';
   if (ArrayBuffer.isView(value))
     return 'typedarray';
+  
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== null && proto !== Object.prototype)
+    throw new Error('Non-plain objects must be specifically integrated by exposing the [SERDE] property');
   return 'object';
 }
 
