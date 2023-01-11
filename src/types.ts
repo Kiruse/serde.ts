@@ -85,6 +85,8 @@ class References {
   }
   
   pop = () => this.pending.pop();
+  
+  get size() { return this.all.size }
 }
 
 /** A symbolic reference representing a cyclical object reference.

@@ -267,6 +267,13 @@ describe('standard serde', () => {
         expect(value.data.a).to.equal(ref.data.a)
         expect(value.data.b.c).to.equal(ref.data.b.c);
       }
+      
+      {
+        const ref = new Foo([1, [2, 3], ['4']]);
+        const bytes = serde.serializeAs('test::simple', ref).compress().buffer;
+        const value = serde.deserializeAs('test::simple', bytes) as Foo;
+        expect(value).to.deep.equal(ref);
+      }
     });
     
     it('data object', () => {
