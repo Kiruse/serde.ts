@@ -11,6 +11,8 @@ export type StandardProtocolMap = {
   null: null,
   regex: RegExp,
   regexp: RegExp,
+  set: Set<unknown>,
+  map: Map<unknown, unknown>,
   buffer: Buffer,
   arraybuffer: ArrayBuffer,
   typedarray: ArrayBufferView,

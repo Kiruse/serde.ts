@@ -35,17 +35,16 @@ export type Serializer<T, M extends TypeMap = any, Ctx = {}> = (ctx: SerializeCo
 export type Deserializer<T, M extends TypeMap = any, Ctx = {}> = (ctx: DeserializeContext<M, Ctx>, reader: Reader) => T;
 
 export class SerializeContext<M extends TypeMap = any, Ctx = {}> {
-  constructor(
-    public serde: Serde<M, Ctx>,
-    public refs = new Map<object, Reference>(),
-    public nextId = 0,
-  ) {}
+  refs = new Map<any, Reference>();
+  nextId = 0;
+  
+  constructor(public serde: Serde<M, Ctx>) {}
   
   // prop method signature overload style
   // so we can pass the method along by itself w/ implied `this`
   ref: RefWrapper = (value: any, force = false) => {
     // pass back thru for convenience
-    if (!value || typeof value !== 'object' || (!force && value[SERDE] === 'data-object'))
+    if (!force && (!value || typeof value !== 'object' || value[SERDE] === 'data-object'))
       return value;
     
     if (!this.refs.has(value)) {
@@ -61,7 +60,8 @@ export class DeserializeContext<M extends TypeMap = any, Ctx = {}> {
     public refs = new Set<DeReference>(),
   ) {}
   
-  deref = (ref: Reference, substitute: DeReference['substitute']) => {
+  /** "Dereference" the given reference. `substitute` will be called with the actual object reference value. */
+  deref = (ref: any, substitute: DeReference['substitute']) => {
     if (ref instanceof Reference) {
       this.refs.add({
         id: ref.id,

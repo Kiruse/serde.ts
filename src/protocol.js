@@ -55,6 +55,10 @@ Serde.prototype.getSubProtocolOf = function(value) {
   
   if (value instanceof RegExp)
     return 'regex';
+  if (value instanceof Set)
+    return 'set';
+  if (value instanceof Map)
+    return 'map';
   
   if (globalThis.Buffer?.isBuffer(value))
     return 'buffer';
@@ -64,52 +68,76 @@ Serde.prototype.getSubProtocolOf = function(value) {
     return 'typedarray';
   
   const proto = Object.getPrototypeOf(value);
-  if (proto !== null && proto !== Object.prototype)
+  if (proto !== null && proto !== Object.prototype && proto !== Array.prototype)
     throw new Error('Non-plain objects must be specifically integrated by exposing the [SERDE] property');
   return 'object';
 }
 
-Serde.prototype.serialize = function(value, writer = new Writer(), ctx = new SerializeContext(this)) {
-  const subprotocol = this.getSubProtocolOf(value);
-  writer.writeUInt32(hash(subprotocol));
-  
-  this.serializeAs(subprotocol, value, writer, ctx);
+Serde.prototype.serialize = function(value, writer = new Writer(), ctx) {
+  if (!ctx) {
+    ctx = new SerializeContext(this);
+    ctx.ref(value, true);
+    writeReferences(ctx, writer);
+  }
+  else {
+    const subprotocol = this.getSubProtocolOf(value);
+    writer.writeUInt32(hash(subprotocol));
+    this.serializeAs(subprotocol, value, writer, ctx);
+  }
   return writer.compress().buffer;
 }
 
-Serde.prototype.deserialize = function(source, ctx = new DeserializeContext(this)) {
+Serde.prototype.deserialize = function(source, ctx) {
   const reader = source instanceof Reader ? source : new Reader(source);
   
-  const hashed = reader.readUInt32();
-  if (!this.hashes.has(hashed))
-    throw new Error(`Failed subprotocol hash lookup: ${hashed.toString(16)}`);
-  
-  const subprotocol = this.hashes.get(hashed);
-  return this.deserializeAs(subprotocol, reader, ctx);
+  if (!ctx) {
+    return readReferences(new DeserializeContext(this), reader);
+  }
+  else {
+    const hashed = reader.readUInt32();
+    if (!this.hashes.has(hashed))
+      throw new Error(`Failed subprotocol hash lookup: ${hashed.toString(16)}`);
+    
+    const subprotocol = this.hashes.get(hashed);
+    return this.deserializeAs(subprotocol, reader, ctx);
+  }
 }
 
 Serde.prototype.serializeAs = function(
   subprotocol,
   value,
   writer = new Writer(),
-  ctx = new SerializeContext(this),
+  ctx,
 ) {
   if (!(subprotocol in this.subprotocols))
     throw new Error(`No such subprotocol: ${subprotocol}`);
-  this.subprotocols[subprotocol].serialize(ctx, writer, value);
+  
+  if (!ctx) {
+    ctx = new SerializeContext(this);
+    ctx.ref(value, true);
+    writeReferences(ctx, writer);
+  }
+  else {
+    this.subprotocols[subprotocol].serialize(ctx, writer, value);
+  }
   return writer;
 }
 
 Serde.prototype.deserializeAs = function(
   subprotocol,
   source,
-  ctx = new DeserializeContext(this),
+  ctx,
 ) {
   const reader = source instanceof Reader ? source : new Reader(source);
 
   if (!(subprotocol in this.subprotocols))
     throw new Error(`No such subprotocol: ${subprotocol}`);
-  return this.subprotocols[subprotocol].deserialize(ctx, reader);
+  
+  if (!ctx) {
+    return readReferences(new DeserializeContext(this), reader);
+  } else {
+    return this.subprotocols[subprotocol].deserialize(ctx, reader);
+  }
 }
 
 Serde.prototype.set = function(
@@ -202,12 +230,54 @@ Serde.prototype.standard = function() {
       serializeRegex,
       deserializeRegex,
     )
-    .set('buffer',
-      ({ serde }, writer, value) => {
-        const bytes = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
-        serde.serializeAs('arraybuffer', bytes, writer);
+    .set('set',
+      (ctx, writer, value) => {
+        const { serde, ref } = ctx;
+        writer.writeUInt32(value.size);
+        for (const item of value) {
+          serde.serialize(ref(item), writer, ctx);
+        }
       },
-      ({ serde }, reader) => globalThis.Buffer.from(serde.deserializeAs('arraybuffer', reader)),
+      (ctx, reader) => {
+        const { serde, deref } = ctx;
+        const size = reader.readUInt32();
+        const result = new Set();
+        for (let i = 0; i < size; ++i) {
+          const item = serde.deserialize(reader, ctx);
+          deref(item, act => result.add(act));
+        }
+        return result;
+      },
+    )
+    .set('map',
+      (ctx, writer, map) => {
+        const { serde, ref } = ctx;
+        writer.writeUInt32(map.size);
+        for (const [key, value] of map.entries()) {
+          serde.serialize(ref(key), writer, ctx);
+          serde.serialize(ref(value), writer, ctx);
+        }
+      },
+      (ctx, reader) => {
+        const { serde, deref } = ctx;
+        const size = reader.readUInt32();
+        const result = new Map();
+        for (let i = 0; i < size; ++i) {
+          const key = serde.deserialize(reader, ctx);
+          const value = serde.deserialize(reader, ctx);
+          Reference.all(deref, [key, value], ([key, value]) => {
+            result.set(key, value);
+          });
+        }
+        return result;
+      },
+    )
+    .set('buffer',
+      (ctx, writer, value) => {
+        const bytes = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
+        ctx.serde.serializeAs('arraybuffer', bytes, writer, ctx);
+      },
+      (ctx, reader) => globalThis.Buffer.from(ctx.serde.deserializeAs('arraybuffer', reader, ctx)),
     )
     .set('arraybuffer',
       (_, writer, value) => {
@@ -217,21 +287,21 @@ Serde.prototype.standard = function() {
       (_, reader) => reader.readBytes(reader.readUInt32()).buffer,
     )
     .set('typedarray',
-      ({ serde }, writer, value) => {
+      (ctx, writer, value) => {
         const type = TYPEDARRAYS.findIndex(con => con && value instanceof con);
         if (type ===  0) throw new Error('How the fuck...');
         if (type === -1) throw new Error('Unsupported TypedArray');
         
         const bytes = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
         writer.writeByte(type);
-        serde.serializeAs('arraybuffer', bytes, writer);
+        ctx.serde.serializeAs('arraybuffer', bytes, writer, ctx);
       },
-      ({ serde }, reader) => {
+      (ctx, reader) => {
         const type = reader.readByte();
         if (type <= 0 || type > TYPEDARRAYS.length) 
           throw new Error(`Invalid TypedArray index: ${type}`);
         const con = TYPEDARRAYS[type];
-        const bytes = serde.deserializeAs('arraybuffer', reader);
+        const bytes = ctx.serde.deserializeAs('arraybuffer', reader, ctx);
         return new con(bytes);
       },
     )
@@ -275,71 +345,58 @@ function deserializeRegex(ctx, reader) {
 
 /** Code shared between generic arrays & generic objects */
 function serializeObject(ctx, writer, value) {
-  const { serde, refs } = ctx;
-  const isRoot = refs.size === 0;
+  const { serde } = ctx;
   if (!value) throw new Error('Invalid object null or undefined');
-  ctx.ref(value, isRoot);
   
-  writer.writeFlags(isRoot, isArrayLike(value));
-  
-  if (isRoot) {
-    writeReferences(ctx, writer);
+  if (isArrayLike(value)) {
+    writer.writeBool(true);
+    writer.writeUInt32(value.length);
+    value.forEach(value => {
+      serde.serialize(ctx.ref(value), writer, ctx);
+    });
   }
   else {
-    if (isArrayLike(value)) {
-      writer.writeUInt32(value.length);
-      value.forEach(value => {
-        serde.serialize(ctx.ref(value), writer, ctx);
-      });
-    }
-    else {
-      const entries = Object.entries(value).filter(isValidPair);
-      writer.writeUInt32(entries.length);
-      entries.forEach(([key, value]) => {
-        serde.serializeAs('string', key, writer, ctx);
-        serde.serialize(ctx.ref(value), writer, ctx);
-      });
-    }
+    const entries = Object.entries(value).filter(isValidPair);
+    writer.writeBool(false);
+    writer.writeUInt32(entries.length);
+    entries.forEach(([key, value]) => {
+      serde.serializeAs('string', key, writer, ctx);
+      serde.serialize(ctx.ref(value), writer, ctx);
+    });
   }
 }
 
 function deserializeObject(ctx, reader) {
   const { serde } = ctx;
-  const [isRoot, isArrayLike] = reader.readFlags();
+  const isArrayLike = reader.readBool();
+  let result;
   
-  if (isRoot) {
-    return readReferences(ctx, reader);
+  const length = reader.readUInt32();
+  if (isArrayLike) {
+    result = new Array(length);
+    for (let i = 0; i < length; ++i) {
+      result[i] = serde.deserialize(reader, ctx);
+    }
   }
   else {
-    let result;
-    
-    const length = reader.readUInt32();
-    if (isArrayLike) {
-      result = new Array(length);
-      for (let i = 0; i < length; ++i) {
-        result[i] = serde.deserialize(reader, ctx);
-      }
+    const entries = new Array(length);
+    for (let i = 0; i < length; ++i) {
+      const key = serde.deserializeAs('string', reader, ctx);
+      const value = serde.deserialize(reader, ctx);
+      entries[i] = [key, value];
     }
-    else {
-      const entries = new Array(length);
-      for (let i = 0; i < length; ++i) {
-        const key = serde.deserializeAs('string', reader, ctx);
-        const value = serde.deserialize(reader, ctx);
-        entries[i] = [key, value];
-      }
-      result = Object.fromEntries(entries);
-    }
-    
-    for (const [key, value] of Object.entries(result)) {
-      if (value instanceof Reference) {
-        ctx.deref(value, obj => {
-          result[key] = obj;
-        });
-      }
-    }
-    
-    return result;
+    result = Object.fromEntries(entries);
   }
+  
+  for (const [key, value] of Object.entries(result)) {
+    if (value instanceof Reference) {
+      ctx.deref(value, obj => {
+        result[key] = obj;
+      });
+    }
+  }
+  
+  return result;
 }
 
 /** `writeReferences` serializes objects found in `ctx.refs` in an ad-hoc
