@@ -70,8 +70,12 @@ Serde.prototype.getSubProtocolOf = function(value) {
     return 'typedarray';
   
   const proto = Object.getPrototypeOf(value);
-  if (proto !== null && proto !== Object.prototype && proto !== Array.prototype)
-    throw new Error('Non-plain objects must be specifically integrated by exposing the [SERDE] property');
+  if (proto !== null && proto !== Object.prototype && proto !== Array.prototype) {
+    throw Object.assign(
+      Error('Non-plain objects must be specifically integrated by exposing the [SERDE] property'),
+      { value, proto },
+    );
+  }
   return 'object';
 }
 
