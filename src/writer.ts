@@ -1,3 +1,5 @@
+import { measure } from './perf'
+
 const BI0 = BigInt(0);
 const BI8 = BigInt(8);
 const BI_BYTEMASK = BigInt(0xFF);
@@ -80,20 +82,22 @@ export default class Writer {
   /** Ensure this Writer's buffer can accommodate an additional `size` bytes. If not, grow. */
   fit(size: number) {
     if (this.cursor + size > this.buffer.length) {
-      this.resize(this.cursor + size);
+      this.resize(this.cursor + Math.max(1024, size));
     }
     return this;
   }
   
   resize(newSize: number) {
-    if (this.size < newSize) {
-      const buffer = this.buffer;
-      this.buffer = new Uint8Array(newSize);
-      this.buffer.set(buffer);
-    }
-    else {
-      this.buffer = this.buffer.slice(0, newSize);
-    }
+    measure('Writer.resize', () => {
+      if (this.size < newSize) {
+        const buffer = this.buffer;
+        this.buffer = new Uint8Array(newSize);
+        this.buffer.set(buffer);
+      }
+      else {
+        this.buffer = this.buffer.slice(0, newSize);
+      }
+    });
     return this;
   }
   

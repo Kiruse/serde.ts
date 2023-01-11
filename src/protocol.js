@@ -1,7 +1,9 @@
 const Reader = require('./reader').default;
 const Writer = require('./writer').default;
+const perf = require('./perf');
 const { DeserializeContext, Reference, SERDE, SerializeContext } = require('./types')
 const { hash, isArrayLike } = require('./util')
+const { measure } = perf;
 
 const TYPEDARRAYS = [
   null,
@@ -77,12 +79,14 @@ Serde.prototype.serialize = function(value, writer = new Writer(), ctx) {
   if (!ctx) {
     ctx = new SerializeContext(this);
     ctx.ref(value, true);
-    writeReferences(ctx, writer);
+    measure('writeReferences', () => writeReferences(ctx, writer));
   }
   else {
-    const subprotocol = this.getSubProtocolOf(value);
-    writer.writeUInt32(hash(subprotocol));
-    this.serializeAs(subprotocol, value, writer, ctx);
+    measure('serialize', () => {
+      const subprotocol = this.getSubProtocolOf(value);
+      writer.writeUInt32(hash(subprotocol));
+      this.serializeAs(subprotocol, value, writer, ctx);
+    });
   }
   return writer.compress().buffer;
 }
@@ -91,15 +95,23 @@ Serde.prototype.deserialize = function(source, ctx) {
   const reader = source instanceof Reader ? source : new Reader(source);
   
   if (!ctx) {
-    return readReferences(new DeserializeContext(this), reader);
+    return measure(
+      'readReferences',
+      () => readReferences(new DeserializeContext(this), reader),
+    );
   }
   else {
-    const hashed = reader.readUInt32();
-    if (!this.hashes.has(hashed))
-      throw new Error(`Failed subprotocol hash lookup: ${hashed.toString(16)}`);
-    
-    const subprotocol = this.hashes.get(hashed);
-    return this.deserializeAs(subprotocol, reader, ctx);
+    return measure(
+      'deserialize',
+      () => {
+        const hashed = reader.readUInt32();
+        if (!this.hashes.has(hashed))
+          throw new Error(`Failed subprotocol hash lookup: ${hashed.toString(16)}`);
+        
+        const subprotocol = this.hashes.get(hashed);
+        return this.deserializeAs(subprotocol, reader, ctx);
+      }
+    );
   }
 }
 
@@ -115,10 +127,13 @@ Serde.prototype.serializeAs = function(
   if (!ctx) {
     ctx = new SerializeContext(this);
     ctx.ref(value, true);
-    writeReferences(ctx, writer);
+    measure('writeReferences', () => writeReferences(ctx, writer));
   }
   else {
-    this.subprotocols[subprotocol].serialize(ctx, writer, value);
+    measure(
+      `[${subprotocol}].serialize`,
+      () => this.subprotocols[subprotocol].serialize(ctx, writer, value),
+    );
   }
   return writer;
 }
@@ -134,9 +149,14 @@ Serde.prototype.deserializeAs = function(
     throw new Error(`No such subprotocol: ${subprotocol}`);
   
   if (!ctx) {
-    return readReferences(new DeserializeContext(this), reader);
+    return measure('readReferences',
+      () => readReferences(new DeserializeContext(this), reader),
+    );
   } else {
-    return this.subprotocols[subprotocol].deserialize(ctx, reader);
+    return measure(
+      `[${subprotocol}].deserialize`,
+      () => this.subprotocols[subprotocol].deserialize(ctx, reader),
+    );
   }
 }
 
@@ -320,6 +340,7 @@ Serde.prototype.standard = function() {
 }
 
 module.exports = Serde;
+Serde.measurePerformance = () => perf.enable();
 Serde.Mapped = () => Serde;
 Serde.SerdeBase = Serde;
 Serde.SerdeAlter = Serde;
@@ -417,7 +438,7 @@ function writeReferences(ctx, writer) {
     
     writer.writeUInt32(ref.id);
     ctx.serde.serialize(obj, writer, ctx);
-    next = find(ctx.refs, ([obj]) => !written.has(obj));
+    next = measure('writeReferences.findNext', () => find(ctx.refs, ([obj]) => !written.has(obj)));
   }
   
   const cursorEnd = writer.tell();

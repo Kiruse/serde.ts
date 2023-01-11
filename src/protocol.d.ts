@@ -100,6 +100,11 @@ interface SerdeConstructor {
   new <M extends TypeMap, Ctx>(ctx: Ctx | ((serde: Serde<M, Ctx>) => Ctx)): Serde<M, Ctx>;
   
   Mapped<M extends TypeMap>(): MappedConstructor<M>;
+  
+  /** Measure the performance of various points of interest using the `Performance` API. Depends on the global
+   * `performance` variable. If not defined, does nothing.
+   */
+  measurePerformance(): void;
 }
 
 interface SerdeAlterConstructor {
