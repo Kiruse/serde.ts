@@ -431,14 +431,14 @@ function writeReferences(ctx, writer) {
   const cursorStart = writer.tell();
   writer.writeUInt32(0);
   
-  let next = ctx.refs.entries().next().value;
+  let next = ctx.refs.pop();
   while (next) {
     const [obj, ref] = next;
     written.add(obj);
     
     writer.writeUInt32(ref.id);
     ctx.serde.serialize(obj, writer, ctx);
-    next = measure('writeReferences.findNext', () => find(ctx.refs, ([obj]) => !written.has(obj)));
+    next = measure('writeReferences.findNext', () => ctx.refs.pop());
   }
   
   const cursorEnd = writer.tell();
@@ -477,13 +477,6 @@ function isValidPair([key, value]) {
   return typeof key !== 'symbol' &&
     typeof value !== 'symbol' &&
     typeof value !== 'function';
-}
-
-function find(from, predicate) {
-  for (const item of from) {
-    if (predicate(item))
-      return item;
-  }
 }
 
 function assertReferenceless(obj, visited = new Set()) {

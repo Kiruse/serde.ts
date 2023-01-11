@@ -35,8 +35,7 @@ export type Serializer<T, M extends TypeMap = any, Ctx = {}> = (ctx: SerializeCo
 export type Deserializer<T, M extends TypeMap = any, Ctx = {}> = (ctx: DeserializeContext<M, Ctx>, reader: Reader) => T;
 
 export class SerializeContext<M extends TypeMap = any, Ctx = {}> {
-  refs = new Map<any, Reference>();
-  nextId = 0;
+  refs = new References();
   
   constructor(public serde: Serde<M, Ctx>) {}
   
@@ -46,11 +45,7 @@ export class SerializeContext<M extends TypeMap = any, Ctx = {}> {
     // pass back thru for convenience
     if (!force && (!value || typeof value !== 'object' || value[SERDE] === 'data-object'))
       return value;
-    
-    if (!this.refs.has(value)) {
-      this.refs.set(value, new Reference(this.nextId++));
-    }
-    return this.refs.get(value)!;
+    return this.refs.push(value);
   }
 }
 
@@ -72,6 +67,24 @@ export class DeserializeContext<M extends TypeMap = any, Ctx = {}> {
       substitute(ref);
     }
   }
+}
+
+/** Collection of references, optimized for continuous processing */
+class References {
+  all = new Map<any, Reference>();
+  pending: [any, Reference][] = [];
+  nextId = 0;
+  
+  push(value: any): Reference {
+    if (!this.all.has(value)) {
+      const ref = new Reference(this.nextId++);
+      this.all.set(value, ref);
+      this.pending.push([value, ref]);
+    }
+    return this.all.get(value)!;
+  }
+  
+  pop = () => this.pending.pop();
 }
 
 /** A symbolic reference representing a cyclical object reference.
