@@ -1,29 +1,41 @@
 //////////////////////////////////////////////////////////////////////
 // Submodule for performance measuring
 const perf = globalThis.performance;
-export default perf;
-let perfCounter = 0;
+const measures: Record<string, Measure[]> = {};
 let enabled = false;
 
+type Measure = {
+  name: string;
+  startTime: number;
+  duration: number;
+  detail?: any;
+}
+
 export function measure<R>(name: string, callback: () => R) {
-  const id = perfCounter++;
-  const markStart = `${name}-${id}S`;
-  const markEnd   = `${name}-${id}E`;
-  const active = enabled && perf;
-  active && perf.mark(markStart);
-  
+  const t0 = perf?.now() || Date.now();
   try {
     const result = callback();
-    active && perf.mark(markEnd);
+    const t1 = perf?.now() || Date.now();
+    pushMeasure(name, t0, t1);
     return result;
   } catch (err) {
-    active && perf.mark(markEnd, { detail: err });
+    const t1 = perf?.now() || Date.now();
+    pushMeasure(name, t0, t1, err);
     throw err;
   }
-  finally {
-    active && perf.measure(`${name}-${id}`, markStart, markEnd);
-  }
+}
+
+function pushMeasure(name: string, t0: number, t1: number, detail?: any) {
+  if (!enabled) return;
+  if (!(name in measures)) measures[name] = [];
+  measures[name].push({
+    name,
+    startTime: t0,
+    duration: t1-t0,
+    detail,
+  });
 }
 
 export const enable  = () => {enabled = true};
 export const disable = () => {enabled = false};
+export const getMeasures = () => measures;
