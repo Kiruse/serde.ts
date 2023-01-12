@@ -30,14 +30,12 @@ export default class Writer {
   
   writeBytes(bytes: Uint8Array) {
     this.fit(bytes.length);
-    this.buffer.set(bytes, this.cursor);
-    this.cursor += bytes.length;
-    this.size += bytes.length;
+    this.buffer.set(bytes, this.advance(bytes.length));
     return this;
   }
   
   writeBool(bool: boolean) {
-    return this.writeByte(bool ? 1 : 0);
+    return this.writeByte(bool ? 0xFF : 0);
   }
   
   writeFlags(...flags: boolean[]) {
@@ -52,25 +50,20 @@ export default class Writer {
   
   writeByte(byte: number) {
     this.fit(1);
-    this.buffer[this.cursor] = byte;
-    this.cursor += 1;
-    this.size += 1;
+    this.buffer[this.advance(1)] = byte;
     return this;
   }
   
   writeUInt32(num: number) {
     this.fit(4);
     new DataView(this.buffer.buffer).setUint32(this.cursor, num, true);
-    this.cursor += 4;
-    this.size += 4;
+    this.advance(4);
     return this;
   }
   
   writeNumber(num: number) {
     this.fit(8);
-    new DataView(this.buffer.buffer).setFloat64(this.cursor, num, true);
-    this.cursor += 8;
-    this.size += 8;
+    new DataView(this.buffer.buffer).setFloat64(this.advance(8), num, true);
     return this;
   }
   
@@ -113,6 +106,14 @@ export default class Writer {
       }
     });
     return this;
+  }
+  
+  /** Advances the internal cursor by n bytes and returns its former value. */
+  protected advance(n: number): number {
+    const old = this.cursor;
+    this.cursor += n;
+    this.size = Math.max(this.cursor, this.size);
+    return old;
   }
   
   compress() {

@@ -120,7 +120,7 @@ describe('standard serde', () => {
   // utilizes arraybuffer
   describe('typedarray', () => {
     it('Uint8Array', () => {
-      const ref = new Uint8Array([1, 2, 3, 4, 5]);
+      const ref = new Uint8Array([1, 2, 3, 4, 5]); // 12B refs header, 1B TypedArray variant, 4B size, 5*(1B payload)
       const bytes = standard.serialize(ref);
       expect(bytes.length).to.equal(22);
       expect(standard.deserialize(bytes)).to.deep.equal(ref);
