@@ -108,6 +108,20 @@ export default class Writer {
     return this;
   }
   
+  /** A specialized variant of `fit` which ensures the internal buffer can hold `size` bytes, and "reserves" the bytes
+   * in terms of "bytes written". This is useful for allocating padded binary segments which may or may not actually
+   * be physically written to.
+   * 
+   * *Note:* The internal cursor is not moved by this method.
+   * 
+   * *Caveat:* Does not prevent writing more bytes than reserved.
+   */
+  reserve(size: number) {
+    this.fit(size);
+    this.size = Math.max(this.size, this.cursor + size);
+    return this;
+  }
+  
   /** Advances the internal cursor by n bytes and returns its former value. */
   protected advance(n: number): number {
     const old = this.cursor;
