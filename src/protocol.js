@@ -79,7 +79,10 @@ Serde.prototype.getSubProtocolOf = function(value) {
   return 'object';
 }
 
-Serde.prototype.serialize = function(value, writer = new Writer(), ctx) {
+Serde.prototype.serialize = function(value, writer, ctx) {
+  const compress = !writer;
+  writer = writer || new Writer();
+  
   if (!ctx) {
     ctx = new SerializeContext(this);
     ctx.ref(value, true);
@@ -92,7 +95,9 @@ Serde.prototype.serialize = function(value, writer = new Writer(), ctx) {
       this.serializeAs(subprotocol, value, writer, ctx);
     });
   }
-  return writer.compress().buffer;
+  
+  if (compress) writer.compress();
+  return writer.buffer;
 }
 
 Serde.prototype.deserialize = function(source, ctx) {

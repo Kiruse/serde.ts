@@ -4,15 +4,29 @@ const BI0 = BigInt(0);
 const BI8 = BigInt(8);
 const BI_BYTEMASK = BigInt(0xFF);
 
+export interface WriterOptions {
+  /** Initial size of the internal buffer. Defaults to 0. */
+  size?: number;
+  /** Minimum number of bytes by which the internal buffer is grown on-demand. Defaults to 1024. */
+  grow?: number;
+}
+
 /** The Writer helps writing serial data to a binary buffer, advancing
  * a cursor as it does.
  */
 export default class Writer {
-  buffer = new Uint8Array();
+  buffer: Uint8Array;
   /** Number of actually written bytes. May diverge from `buffer.length` */
   size = 0;
   /** Position at which to write binary data. */
   cursor = 0;
+  /** The minimum number of bytes by which the buffer is grown on demand. */
+  grow: number;
+  
+  constructor({ size = 0, grow = 1024 }: WriterOptions = {}) {
+    this.buffer = new Uint8Array(size);
+    this.grow = grow;
+  }
   
   writeBytes(bytes: Uint8Array) {
     this.fit(bytes.length);
@@ -82,7 +96,7 @@ export default class Writer {
   /** Ensure this Writer's buffer can accommodate an additional `size` bytes. If not, grow. */
   fit(size: number) {
     if (this.cursor + size > this.buffer.length) {
-      this.resize(this.cursor + Math.max(1024, size));
+      this.resize(this.cursor + Math.max(this.grow, size, Math.floor(this.buffer.length / 10)));
     }
     return this;
   }
