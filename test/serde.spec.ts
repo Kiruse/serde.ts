@@ -15,7 +15,7 @@ describe('standard serde', () => {
       const reader = new Reader(bytes);
       const value = standard.deserializeAs('string', reader);
       expect(value).to.equal('foobar');
-      expect(reader.tell()).to.equal(22); // 8B refs, 4B hash, 4B length, 6B string
+      expect(reader.tell()).to.equal(23); // 8B refs, 1B ref retarget, 4B hash, 4B length, 6B string
     });
     
     it('serialize', () => {
@@ -28,12 +28,12 @@ describe('standard serde', () => {
     
     it('empty', () => {
       const bytes = standard.serializeAs('string', '').compress().buffer;
-      expect(bytes.byteLength).to.equal(16);
+      expect(bytes.byteLength).to.equal(17);
       
       const reader = new Reader(bytes);
       const value = standard.deserializeAs('string', reader);
       expect(value).to.equal('');
-      expect(reader.tell()).to.equal(16);
+      expect(reader.tell()).to.equal(17);
     });
   });
   
@@ -41,14 +41,14 @@ describe('standard serde', () => {
     {
       const bytes = standard.serialize(undefined);
       expect(bytes).to.be.instanceOf(Uint8Array);
-      expect(bytes.length).to.equal(12);
+      expect(bytes.length).to.equal(13);
       expect(standard.deserialize(bytes)).to.be.undefined;
     }
     
     {
       const bytes = standard.serialize(null);
       expect(bytes).to.be.instanceOf(Uint8Array);
-      expect(bytes.length).to.equal(12);
+      expect(bytes.length).to.equal(13);
       expect(standard.deserialize(bytes)).to.be.null;
     }
   });
@@ -57,14 +57,14 @@ describe('standard serde', () => {
     it('serializeAs', () => {
       const bytes = standard.serializeAs('number', 42).compress().buffer;
       expect(bytes).to.be.instanceOf(Uint8Array);
-      expect(bytes.length).to.equal(20); // 8B refs header, 4B hash, 8B number
+      expect(bytes.length).to.equal(21); // 8B refs header, 1B ref retarget, 4B hash, 8B number
       expect(standard.deserializeAs('number', bytes)).to.equal(42);
     });
     
     it('serialize', () => {
       const bytes = standard.serialize(42);
       expect(bytes).to.be.instanceOf(Uint8Array);
-      expect(bytes.length).to.equal(20);
+      expect(bytes.length).to.equal(21);
       expect(standard.deserialize(bytes)).to.equal(42);
     });
   });
@@ -105,14 +105,14 @@ describe('standard serde', () => {
     it('serializeAs', () => {
       const ref = Buffer.from([1, 2, 3, 4, 5]);
       const bytes = standard.serializeAs('buffer', ref).compress().buffer;
-      expect(bytes.length).to.equal(21);
+      expect(bytes.length).to.equal(22); // 8B refs header, 1B ref retarget, 4B hash, 4B length, 5B payload
       expect(standard.deserializeAs('buffer', bytes)).to.deep.equal(ref);
     });
     
     it('serialize', () => {
       const ref = Buffer.from([1, 2, 3, 4, 5]);
       const bytes = standard.serialize(ref);
-      expect(bytes.length).to.equal(21);
+      expect(bytes.length).to.equal(22); // 8B refs header, 1B no ref retarget, 4B hash, 4B length, 5B payload
       expect(standard.deserialize(bytes)).to.deep.equal(ref);
     });
   });
@@ -122,21 +122,21 @@ describe('standard serde', () => {
     it('Uint8Array', () => {
       const ref = new Uint8Array([1, 2, 3, 4, 5]); // 12B refs header, 1B TypedArray variant, 4B size, 5*(1B payload)
       const bytes = standard.serialize(ref);
-      expect(bytes.length).to.equal(22);
+      expect(bytes.length).to.equal(23);
       expect(standard.deserialize(bytes)).to.deep.equal(ref);
     });
     
     it('Float64Array', () => {
       const ref = new Float64Array([69.69, 24.25, 4.20]);
       const bytes = standard.serialize(ref);
-      expect(bytes.length).to.equal(41);
+      expect(bytes.length).to.equal(42);
       expect(standard.deserialize(bytes)).to.deep.equal(ref);
     });
     
     it('BigUint64', () => {
       const ref = new BigUint64Array([BigInt(1), BigInt(2), BigInt(3)]);
       const bytes = standard.serialize(ref);
-      expect(bytes.length).to.equal(41);
+      expect(bytes.length).to.equal(42);
       expect(standard.deserialize(bytes)).to.deep.equal(ref);
     });
   });

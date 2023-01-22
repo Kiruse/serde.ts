@@ -85,7 +85,7 @@ Serde.prototype.serialize = function(value, writer, ctx) {
   
   if (!ctx) {
     ctx = new SerializeContext(this);
-    ctx.ref(value, true);
+    ctx.ref(value, undefined, true);
     measure('writeReferences', () => writeReferences(ctx, writer));
   }
   else {
@@ -113,11 +113,7 @@ Serde.prototype.deserialize = function(source, ctx) {
     return measure(
       'deserialize',
       () => {
-        const hashed = reader.readUInt32();
-        if (!this.hashes.has(hashed))
-          throw new Error(`Failed subprotocol hash lookup: ${hashed.toString(16)}`);
-        
-        const subprotocol = this.hashes.get(hashed);
+        const subprotocol = this.protocolFromHash(reader.readUInt32());
         return this.deserializeAs(subprotocol, reader, ctx);
       }
     );
@@ -135,7 +131,7 @@ Serde.prototype.serializeAs = function(
   
   if (!ctx) {
     ctx = new SerializeContext(this);
-    ctx.ref(value, true);
+    ctx.ref(value, subprotocol, true);
     measure('writeReferences', () => writeReferences(ctx, writer));
   }
   else {
@@ -167,6 +163,12 @@ Serde.prototype.deserializeAs = function(
       () => this.subprotocols[subprotocol].deserialize(ctx, reader),
     );
   }
+}
+
+Serde.prototype.protocolFromHash = function(hash) {
+  if (!this.hashes.has(hash))
+    throw Error(`Failed subprotocol hash lookup: ${hash.toString(16)}`);
+  return this.hashes.get(hash);
 }
 
 Serde.prototype.set = function(
@@ -446,7 +448,16 @@ function writeReferences(ctx, writer) {
     written.add(obj);
     
     writer.writeUInt32(ref.id);
-    ctx.serde.serialize(obj, writer, ctx);
+    
+    if (ref.subprotocol) {
+      writer.writeBool(true);
+      writer.writeUInt32(hash(ref.subprotocol));
+      ctx.serde.serializeAs(ref.subprotocol, obj, writer, ctx);
+    } else {
+      writer.writeBool(false);
+      ctx.serde.serialize(obj, writer, ctx);
+    }
+    
     next = measure('writeReferences.findNext', () => ctx.refs.pop());
   }
   
@@ -467,8 +478,14 @@ function readReferences(ctx, reader) {
   
   for (let i = 0; i < count; ++i) {
     const refid = reader.readUInt32();
-    const obj = serde.deserialize(reader, ctx);
-    objs[refid] = obj;
+    
+    const subprotocolOverride = reader.readBool();
+    if (subprotocolOverride) {
+      const subprotocol = serde.protocolFromHash(reader.readUInt32());
+      objs[refid] = ctx.serde.deserializeAs(subprotocol, reader, ctx);
+    } else {
+      objs[refid] = ctx.serde.deserialize(reader, ctx);
+    }
   }
   
   for (const ref of refs) {

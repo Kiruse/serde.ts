@@ -41,7 +41,7 @@ export class SerializeContext<M extends TypeMap = any, Ctx = {}> {
   
   // prop method signature overload style
   // so we can pass the method along by itself w/ implied `this`
-  ref: RefWrapper = (value: any, force = false) => {
+  ref: RefWrapper = (value: any, subprotocol?: string, force = false) => {
     // pass back thru for convenience
     if (!force && (!value || typeof value !== 'object' || value[SERDE] === 'data-object'))
       return value;
@@ -75,9 +75,9 @@ class References {
   pending: [any, Reference][] = [];
   nextId = 0;
   
-  push(value: any): Reference {
+  push(value: any, subprotocol?: string): Reference {
     if (!this.all.has(value)) {
-      const ref = new Reference(this.nextId++);
+      const ref = new Reference(this.nextId++, subprotocol);
       this.all.set(value, ref);
       this.pending.push([value, ref]);
     }
@@ -95,7 +95,11 @@ class References {
  */
 export class Reference {
   [SERDE] = 'reference';
-  constructor(public readonly id: number) {}
+  constructor(
+    public readonly id: number,
+    /** Subprotocol to apply rather than the default */
+    public readonly subprotocol?: string,
+  ) {}
   
   static all(deref: DeserializeContext['deref'], refs: any[], callback: (values: any[]) => void) {
     // actual values w/o References remaining
