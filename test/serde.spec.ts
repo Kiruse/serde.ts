@@ -240,6 +240,29 @@ describe('standard serde', () => {
   });
   
   describe('custom', () => {
+    it('override', () => {
+      let writeCalled = false;
+      let readCalled = false;
+      const serde = SerdeAlter().standard()
+        .set('byte',
+          (ctx, writer, value: number) => {
+            writeCalled = true;
+            writer.writeByte(value);
+          },
+          (ctx, reader) => {
+            readCalled = true;
+            return reader.readByte();
+          },
+        );
+      
+      const ref = 42;
+      const bytes = serde.serializeAs('byte', ref).compress().buffer;
+      const read = serde.deserialize(bytes);
+      expect(read).to.equal(ref);
+      expect(writeCalled).to.be.true;
+      expect(readCalled).to.be.true;
+    });
+    
     it('simple', () => {
       class Foo {
         [SERDE] = 'test::simple';

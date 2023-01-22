@@ -45,7 +45,7 @@ export class SerializeContext<M extends TypeMap = any, Ctx = {}> {
     // pass back thru for convenience
     if (!force && (!value || typeof value !== 'object' || value[SERDE] === 'data-object'))
       return value;
-    return this.refs.push(value);
+    return this.refs.push(value, subprotocol);
   }
 }
 
